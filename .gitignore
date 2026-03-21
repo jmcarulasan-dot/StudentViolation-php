@@ -1,0 +1,4 @@
+/vendor/
+.env
+includes/config.php
+*.sql
