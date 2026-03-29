@@ -371,7 +371,6 @@ $resolvedCount   = $totalViolations - $pendingCount;
                             <option value="">-- Select Course --</option>
                             <option>BSIT</option>
                             <option>BSCS</option>
-                            <option>BSEMC</option>
                             <option>BSA</option>
                             <option>BSBA</option>
                             <option>BSHM</option>

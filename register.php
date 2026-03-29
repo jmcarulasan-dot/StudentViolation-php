@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <select name="course" class="form-control" required>
                         <option value="">-- Select Course --</option>
                         <?php
-                        $courses = ['BSIT','BSCS','BSEMC','BSA','BSBA','BSHM'];
+                        $courses = ['BSIT','BSCS','BSA','BSBA','BSHM'];
                         foreach ($courses as $c) {
                             $sel = (($_POST['course'] ?? '') === $c) ? 'selected' : '';
                             echo "<option value=\"$c\" $sel>$c</option>";
