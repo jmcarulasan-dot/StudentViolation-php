@@ -353,3 +353,145 @@ tbody td { padding: 12px 16px; color: var(--text); }
     .page-wrapper { padding: 0 1rem; }
     .navbar { padding: 0 1rem; }
 }
+
+/* ── Improved Navbar ── */
+.navbar {
+    background: linear-gradient(135deg, #0d1b3e 0%, #1a3a5c 100%);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.2);
+    position: sticky; top: 0; z-index: 100;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+}
+
+.nav-logo {
+    width: 36px; height: 36px;
+    background: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    border: 2px solid rgba(255,255,255,0.3);
+    flex-shrink: 0;
+    padding: 3px;
+}
+
+.nav-logo img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.nav-brand-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.nav-title {
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    line-height: 1.2;
+}
+
+.nav-sub {
+    color: rgba(255,255,255,0.55);
+    font-size: 0.7rem;
+    letter-spacing: 0.3px;
+}
+
+.nav-user {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.nav-role-badge {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.nav-name {
+    color: rgba(255,255,255,0.8);
+    font-size: 0.85rem;
+}
+
+.nav-link {
+    color: rgba(255,255,255,0.8);
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.2);
+    transition: all 0.2s;
+}
+
+.nav-link:hover { background: rgba(255,255,255,0.1); color: white; }
+
+.nav-logout {
+    color: white;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: #e53e3e;
+    transition: background 0.2s;
+}
+
+.nav-logout:hover { background: #c53030; }
+
+/* ── Improved Stat Cards ── */
+.stat-card {
+    background: white;
+    border-radius: 14px;
+    padding: 1.4rem 1.6rem;
+    border: 1px solid var(--border);
+    box-shadow: var(--card-shadow);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.stat-icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+.stat-info .stat-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--primary);
+    line-height: 1;
+}
+
+.stat-info .stat-label {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+}
+
+.stat-card.accent .stat-info .stat-num { color: var(--accent); }
+.stat-card.gold .stat-info .stat-num   { color: var(--gold); }
+.stat-card.green .stat-info .stat-num  { color: var(--success); }
+.stat-card.purple .stat-info .stat-num { color: #8b5cf6; }

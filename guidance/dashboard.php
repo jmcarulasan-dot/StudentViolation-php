@@ -215,23 +215,35 @@ $resolvedCount   = $totalViolations - $pendingCount;
 
     <!-- Stats -->
     <div class="stats-grid">
-        <div class="stat-card">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#e8f0fe;">👥</div>
+        <div class="stat-info">
             <div class="stat-num"><?= $totalStudents ?></div>
             <div class="stat-label">Total Students</div>
         </div>
-        <div class="stat-card gold">
+    </div>
+    <div class="stat-card gold">
+        <div class="stat-icon" style="background:#fef3c7;">📋</div>
+        <div class="stat-info">
             <div class="stat-num"><?= $totalViolations ?></div>
             <div class="stat-label">Total Violations</div>
         </div>
-        <div class="stat-card accent">
+    </div>
+    <div class="stat-card accent">
+        <div class="stat-icon" style="background:#fee2e2;">⚠️</div>
+        <div class="stat-info">
             <div class="stat-num"><?= $pendingCount ?></div>
             <div class="stat-label">Pending</div>
         </div>
-        <div class="stat-card green">
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon" style="background:#d1fae5;">✅</div>
+        <div class="stat-info">
             <div class="stat-num"><?= $resolvedCount ?></div>
             <div class="stat-label">Resolved</div>
         </div>
     </div>
+</div>
 
     <!-- Tabs -->
     <div class="tabs">

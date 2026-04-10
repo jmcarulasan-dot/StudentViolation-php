@@ -5,15 +5,13 @@ requireLogin('guard');
 $success = '';
 $error   = '';
 
-// Record a new violation
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $student_no     = trim($_POST['student_no'] ?? '');
+    $student_no     = strtoupper(trim($_POST['student_no'] ?? ''));
     $violation_type = trim($_POST['violation_type'] ?? '');
     $description    = trim($_POST['description'] ?? '');
     $date_recorded  = $_POST['date_recorded'] ?? date('Y-m-d');
 
     if ($student_no && $violation_type && $date_recorded) {
-        // Find student
         $stmt = $conn->prepare("SELECT id FROM students WHERE student_no = ?");
         $stmt->bind_param("s", $student_no);
         $stmt->execute();
@@ -22,11 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($found) {
             $stmt = $conn->prepare("INSERT INTO violations (student_id, violation_type, description, date_recorded, recorded_by) VALUES (?,?,?,?,?)");
             $stmt->bind_param("isssi", $found['id'], $violation_type, $description, $date_recorded, $_SESSION['user_id']);
-            if ($stmt->execute()) {
-                $success = "Violation recorded successfully!";
-            } else {
-                $error = "Failed to record violation.";
-            }
+            $stmt->execute() ? $success = "Violation recorded successfully!" : $error = "Failed to record violation.";
         } else {
             $error = "Student No. not found.";
         }
@@ -35,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Get all violations
 $violations = $conn->query("
     SELECT v.*, s.name AS student_name, s.student_no, u.name AS recorded_by_name
     FROM violations v
@@ -43,12 +36,11 @@ $violations = $conn->query("
     JOIN users u ON v.recorded_by = u.id
     ORDER BY v.date_recorded DESC
 ");
-
 $rows    = $violations->fetch_all(MYSQLI_ASSOC);
 $total   = count($rows);
 $pending = count(array_filter($rows, fn($r) => $r['status'] === 'pending'));
+$resolved = $total - $pending;
 
-// Get students for datalist
 $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
 ?>
 <!DOCTYPE html>
@@ -65,22 +57,31 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
 <div class="page-wrapper">
     <div class="page-header">
         <h2>Guard Dashboard</h2>
-        <p>Record and monitor student violations.</p>
+        <p>Record and monitor student violations. Logged in as <strong><?= htmlspecialchars($_SESSION['name']) ?></strong>.</p>
     </div>
 
     <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-num"><?= $total ?></div>
-            <div class="stat-label">Total Violations</div>
+            <div class="stat-icon" style="background:#e8f0fe;">📋</div>
+            <div class="stat-info">
+                <div class="stat-num"><?= $total ?></div>
+                <div class="stat-label">Total Violations</div>
+            </div>
         </div>
         <div class="stat-card accent">
-            <div class="stat-num"><?= $pending ?></div>
-            <div class="stat-label">Pending</div>
+            <div class="stat-icon" style="background:#fee2e2;">⚠️</div>
+            <div class="stat-info">
+                <div class="stat-num"><?= $pending ?></div>
+                <div class="stat-label">Pending</div>
+            </div>
         </div>
         <div class="stat-card green">
-            <div class="stat-num"><?= $total - $pending ?></div>
-            <div class="stat-label">Resolved</div>
+            <div class="stat-icon" style="background:#d1fae5;">✅</div>
+            <div class="stat-info">
+                <div class="stat-num"><?= $resolved ?></div>
+                <div class="stat-label">Resolved</div>
+            </div>
         </div>
     </div>
 
@@ -95,7 +96,11 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
             <div class="form-row">
                 <div class="form-group">
                     <label>Student No. <span style="color:red">*</span></label>
-                    <input type="text" name="student_no" class="form-control" list="students-list" placeholder="e.g. C26-01-0001-MAN121" required>
+                    <input type="text" name="student_no" class="form-control"
+                           list="students-list"
+                           placeholder="e.g. C26-01-0001-MAN121"
+                           oninput="this.value = this.value.toUpperCase()"
+                           required>
                     <datalist id="students-list">
                         <?php while ($s = $students->fetch_assoc()): ?>
                             <option value="<?= htmlspecialchars($s['student_no']) ?>"><?= htmlspecialchars($s['name']) ?></option>
@@ -132,7 +137,15 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
 
     <!-- All Violations -->
     <div class="card">
-        <div class="card-title">📂 All Violations</div>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.8rem;">
+            <div class="card-title" style="margin:0; border:none; padding:0;">📂 All Violations</div>
+            <input type="text" id="searchInput" class="form-control"
+                   placeholder="🔍 Search violations..."
+                   oninput="searchTable()"
+                   style="max-width:280px; margin:0;">
+        </div>
+        <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
+
         <?php if (empty($rows)): ?>
             <div class="empty-state">
                 <div class="empty-icon">📂</div>
@@ -140,7 +153,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
             </div>
         <?php else: ?>
         <div class="table-wrap">
-            <table>
+            <table id="violationsTable">
                 <thead>
                     <tr>
                         <th>#</th>
@@ -165,8 +178,23 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
                 </tbody>
             </table>
         </div>
+        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem;">No results found.</p>
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+function searchTable() {
+    const input = document.getElementById('searchInput').value.toLowerCase();
+    const rows  = document.querySelectorAll('#violationsTable tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+        const match = row.innerText.toLowerCase().includes(input);
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+    document.getElementById('noResults').style.display = visible === 0 ? 'block' : 'none';
+}
+</script>
 </body>
 </html>

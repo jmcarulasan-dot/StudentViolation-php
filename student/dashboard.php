@@ -4,13 +4,11 @@ requireLogin('student');
 
 $student_id = $_SESSION['student_id'];
 
-// Get student info
 $stmt = $conn->prepare("SELECT * FROM students WHERE id = ?");
 $stmt->bind_param("i", $student_id);
 $stmt->execute();
 $student = $stmt->get_result()->fetch_assoc();
 
-// Get violations
 $stmt = $conn->prepare("
     SELECT v.*, u.name AS recorded_by_name
     FROM violations v
@@ -22,12 +20,9 @@ $stmt->bind_param("i", $student_id);
 $stmt->execute();
 $violations = $stmt->get_result();
 
-$total    = $violations->num_rows;
+$total = $violations->num_rows;
 $violations->data_seek(0);
-
-$pending  = 0;
-$resolved = 0;
-$rows     = [];
+$pending = 0; $resolved = 0; $rows = [];
 while ($row = $violations->fetch_assoc()) {
     $rows[] = $row;
     if ($row['status'] === 'pending')  $pending++;
@@ -48,56 +43,88 @@ while ($row = $violations->fetch_assoc()) {
 <div class="page-wrapper">
     <div class="page-header">
         <h2>My Dashboard</h2>
-        <p>Welcome back, <?= htmlspecialchars($_SESSION['name']) ?>! Here are your violation records.</p>
+        <p>Welcome back, <strong><?= htmlspecialchars($_SESSION['name']) ?></strong>! Here are your violation records.</p>
     </div>
 
     <!-- Student Info Card -->
-    <div class="card">
-        <div class="card-title">Student Information</div>
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:1rem;">
-            <div>
-                <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Student No.</div>
-                <div style="font-weight:700; margin-top:4px;"><?= htmlspecialchars($student['student_no']) ?></div>
+    <div class="card" style="background: linear-gradient(135deg, #0d1b3e 0%, #1a3a5c 100%); border:none;">
+        <div style="display:flex; align-items:center; gap:1.2rem; margin-bottom:1.2rem;">
+            <div style="width:52px; height:52px; background:rgba(255,255,255,0.15); border-radius:50%;
+                        display:flex; align-items:center; justify-content:center; font-size:1.5rem;">
+                🎓
             </div>
             <div>
-                <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Full Name</div>
-                <div style="font-weight:700; margin-top:4px;"><?= htmlspecialchars($student['name']) ?></div>
+                <div style="color:white; font-family:'Syne',sans-serif; font-size:1.1rem; font-weight:800;">
+                    <?= htmlspecialchars($student['name']) ?>
+                </div>
+                <div style="color:rgba(255,255,255,0.6); font-size:0.8rem; margin-top:2px;">
+                    <?= htmlspecialchars($student['student_no']) ?>
+                </div>
             </div>
-            <div>
-                <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Course</div>
-                <div style="font-weight:700; margin-top:4px;"><?= htmlspecialchars($student['course']) ?></div>
+            <div style="margin-left:auto;">
+                <span style="background:rgba(255,255,255,0.15); color:white; padding:4px 12px;
+                             border-radius:20px; font-size:0.78rem; font-weight:600;">
+                    <?= htmlspecialchars($student['course']) ?> — Year <?= $student['year_level'] ?>
+                </span>
             </div>
-            <div>
-                <div style="font-size:0.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Year Level</div>
-                <div style="font-weight:700; margin-top:4px;">Year <?= $student['year_level'] ?></div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:0.8rem;">
+            <?php
+            $infos = [
+                ['Student No.', $student['student_no']],
+                ['Full Name', $student['name']],
+                ['Course', $student['course']],
+                ['Year Level', 'Year ' . $student['year_level']],
+            ];
+            foreach ($infos as $info):
+            ?>
+            <div style="background:rgba(255,255,255,0.08); border-radius:10px; padding:0.8rem 1rem;">
+                <div style="color:rgba(255,255,255,0.5); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px;">
+                    <?= $info[0] ?>
+                </div>
+                <div style="color:white; font-weight:700; margin-top:4px; font-size:0.9rem;">
+                    <?= htmlspecialchars($info[1]) ?>
+                </div>
             </div>
+            <?php endforeach; ?>
         </div>
     </div>
 
     <!-- Stats -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-num"><?= $total ?></div>
-            <div class="stat-label">Total Violations</div>
+            <div class="stat-icon" style="background:#e8f0fe;">📋</div>
+            <div class="stat-info">
+                <div class="stat-num"><?= $total ?></div>
+                <div class="stat-label">Total Violations</div>
+            </div>
         </div>
         <div class="stat-card accent">
-            <div class="stat-num"><?= $pending ?></div>
-            <div class="stat-label">Pending</div>
+            <div class="stat-icon" style="background:#fee2e2;">⚠️</div>
+            <div class="stat-info">
+                <div class="stat-num"><?= $pending ?></div>
+                <div class="stat-label">Pending</div>
+            </div>
         </div>
         <div class="stat-card green">
-            <div class="stat-num"><?= $resolved ?></div>
-            <div class="stat-label">Resolved</div>
+            <div class="stat-icon" style="background:#d1fae5;">✅</div>
+            <div class="stat-info">
+                <div class="stat-num"><?= $resolved ?></div>
+                <div class="stat-label">Resolved</div>
+            </div>
         </div>
     </div>
 
     <!-- Violations Table -->
     <div class="card">
-        <div class="card-title">My Violation Records</div>
-
-        <!-- Search Bar -->
-        <div style="margin-bottom:1rem;">
-            <input type="text" id="searchInput" class="form-control" placeholder="🔍 Search by violation type or status..." oninput="searchTable()" style="max-width:400px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.8rem;">
+            <div class="card-title" style="margin:0; border:none; padding:0;">My Violation Records</div>
+            <input type="text" id="searchInput" class="form-control"
+                   placeholder="🔍 Search violations..."
+                   oninput="searchTable()"
+                   style="max-width:280px; margin:0;">
         </div>
+        <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
 
         <?php if (empty($rows)): ?>
             <div class="empty-state">
@@ -131,7 +158,9 @@ while ($row = $violations->fetch_assoc()) {
                 </tbody>
             </table>
         </div>
-        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem;">No violations match your search.</p>
+        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem;">
+            No violations match your search.
+        </p>
         <?php endif; ?>
     </div>
 </div>
@@ -141,17 +170,11 @@ function searchTable() {
     const input  = document.getElementById('searchInput').value.toLowerCase();
     const rows   = document.querySelectorAll('#violationsTable tbody tr');
     let visible  = 0;
-
     rows.forEach(row => {
-        const text = row.innerText.toLowerCase();
-        if (text.includes(input)) {
-            row.style.display = '';
-            visible++;
-        } else {
-            row.style.display = 'none';
-        }
+        const match = row.innerText.toLowerCase().includes(input);
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
     });
-
     document.getElementById('noResults').style.display = visible === 0 ? 'block' : 'none';
 }
 </script>
