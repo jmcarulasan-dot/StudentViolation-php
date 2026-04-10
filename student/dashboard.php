@@ -36,6 +36,95 @@ while ($row = $violations->fetch_assoc()) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SVS — Student Dashboard</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
+    <style>
+        .student-card {
+            background: linear-gradient(135deg, #0d1b3e 0%, #1a3a5c 100%);
+            border-radius: 14px;
+            padding: 1.8rem;
+            margin-bottom: 1.5rem;
+            border: none;
+        }
+
+        .student-card-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.2rem;
+            flex-wrap: wrap;
+        }
+
+        .student-avatar {
+            width: 48px; height: 48px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem;
+            flex-shrink: 0;
+        }
+
+        .student-card-name {
+            color: white;
+            font-family: 'Syne', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 800;
+        }
+
+        .student-card-no {
+            color: rgba(255,255,255,0.6);
+            font-size: 0.8rem;
+            margin-top: 2px;
+        }
+
+        .student-card-badge {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .student-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 0.8rem;
+        }
+
+        .student-info-item {
+            background: rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 0.8rem 1rem;
+        }
+
+        .student-info-label {
+            color: rgba(255,255,255,0.5);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .student-info-value {
+            color: white;
+            font-weight: 700;
+            margin-top: 4px;
+            font-size: 0.9rem;
+        }
+
+        /* Fix stat icon */
+        .stat-icon {
+            width: 44px;
+            height: 44px;
+            min-width: 44px;
+            min-height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+    </style>
 </head>
 <body>
 <?php include '../includes/navbar.php'; ?>
@@ -47,46 +136,34 @@ while ($row = $violations->fetch_assoc()) {
     </div>
 
     <!-- Student Info Card -->
-    <div class="card" style="background: linear-gradient(135deg, #0d1b3e 0%, #1a3a5c 100%); border:none;">
-        <div style="display:flex; align-items:center; gap:1.2rem; margin-bottom:1.2rem;">
-            <div style="width:52px; height:52px; background:rgba(255,255,255,0.15); border-radius:50%;
-                        display:flex; align-items:center; justify-content:center; font-size:1.5rem;">
-                🎓
-            </div>
+    <div class="student-card">
+        <div class="student-card-header">
+            <div class="student-avatar">🎓</div>
             <div>
-                <div style="color:white; font-family:'Syne',sans-serif; font-size:1.1rem; font-weight:800;">
-                    <?= htmlspecialchars($student['name']) ?>
-                </div>
-                <div style="color:rgba(255,255,255,0.6); font-size:0.8rem; margin-top:2px;">
-                    <?= htmlspecialchars($student['student_no']) ?>
-                </div>
+                <div class="student-card-name"><?= htmlspecialchars($student['name']) ?></div>
+                <div class="student-card-no"><?= htmlspecialchars($student['student_no']) ?></div>
             </div>
-            <div style="margin-left:auto;">
-                <span style="background:rgba(255,255,255,0.15); color:white; padding:4px 12px;
-                             border-radius:20px; font-size:0.78rem; font-weight:600;">
-                    <?= htmlspecialchars($student['course']) ?> — Year <?= $student['year_level'] ?>
-                </span>
-            </div>
+            <span class="student-card-badge">
+                <?= htmlspecialchars($student['course']) ?> — Year <?= $student['year_level'] ?>
+            </span>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:0.8rem;">
-            <?php
-            $infos = [
-                ['Student No.', $student['student_no']],
-                ['Full Name', $student['name']],
-                ['Course', $student['course']],
-                ['Year Level', 'Year ' . $student['year_level']],
-            ];
-            foreach ($infos as $info):
-            ?>
-            <div style="background:rgba(255,255,255,0.08); border-radius:10px; padding:0.8rem 1rem;">
-                <div style="color:rgba(255,255,255,0.5); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.5px;">
-                    <?= $info[0] ?>
-                </div>
-                <div style="color:white; font-weight:700; margin-top:4px; font-size:0.9rem;">
-                    <?= htmlspecialchars($info[1]) ?>
-                </div>
+        <div class="student-info-grid">
+            <div class="student-info-item">
+                <div class="student-info-label">Student No.</div>
+                <div class="student-info-value"><?= htmlspecialchars($student['student_no']) ?></div>
             </div>
-            <?php endforeach; ?>
+            <div class="student-info-item">
+                <div class="student-info-label">Full Name</div>
+                <div class="student-info-value"><?= htmlspecialchars($student['name']) ?></div>
+            </div>
+            <div class="student-info-item">
+                <div class="student-info-label">Course</div>
+                <div class="student-info-value"><?= htmlspecialchars($student['course']) ?></div>
+            </div>
+            <div class="student-info-item">
+                <div class="student-info-label">Year Level</div>
+                <div class="student-info-value">Year <?= $student['year_level'] ?></div>
+            </div>
         </div>
     </div>
 

@@ -17,9 +17,7 @@ $roleColor = $roleColors[$role] ?? '#1a3a5c';
 ?>
 <nav class="navbar">
     <a href="<?= $dashboardLink ?>" class="brand">
-        <div class="nav-logo">
-            <img src="<?= BASE_URL ?>assets/image/ACLC.png" alt="ACLC">
-        </div>
+        <div class="nav-logo">🛡️</div>
         <div class="nav-brand-text">
             <span class="nav-title">ACLC — SVS</span>
             <span class="nav-sub">Student Violation System</span>
@@ -45,7 +43,7 @@ $roleColor = $roleColors[$role] ?? '#1a3a5c';
      onclick="if(event.target===this) this.style.display='none';">
     <div style="background:#fff; border-radius:16px; padding:2rem; max-width:360px;
                 width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.25); text-align:center;">
-        <img src="<?= BASE_URL ?>assets/image/ACLC.png" alt="ACLC" style="width:50px; height:50px; object-fit:contain; margin-bottom:0.8rem;">
+        <div style="font-size:2.5rem; margin-bottom:0.8rem;">🛡️</div>
         <h3 style="margin:0 0 .4rem; font-size:1.1rem; font-weight:700; color:#1a202c;">Log out?</h3>
         <p style="color:#718096; font-size:.88rem; margin:0 0 1.5rem;">Are you sure you want to end your session?</p>
         <div style="display:flex; gap:10px; justify-content:center;">
