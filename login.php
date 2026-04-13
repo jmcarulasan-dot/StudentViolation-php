@@ -48,12 +48,30 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SVS — Login</title>
-    <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
-        body, html { height: 100%; }
+        :root {
+            --primary:   #1a3a5c;
+            --accent:    #e84545;
+            --bg:        #f0f4f8;
+            --white:     #ffffff;
+            --text:      #1e2a3a;
+            --muted:     #64748b;
+            --border:    #cbd5e1;
+            --border-focus: #1a3a5c;
+            --input-bg:  #f8fafc;
+            --radius:    12px;
+            --radius-lg: 20px;
+        }
 
+        body, html {
+            height: 100%;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+        }
+
+        /* ── Background ── */
         .login-page {
             min-height: 100vh;
             display: flex;
@@ -64,64 +82,64 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             overflow: hidden;
         }
 
-        /* Background image */
         .login-bg {
             position: fixed;
             inset: 0;
             background: url('<?= BASE_URL ?>assets/image/BackGround.webp') center center / cover no-repeat;
-            filter: blur(3px) brightness(0.55);
-            transform: scale(1.05);
+            filter: blur(4px) brightness(0.45);
+            transform: scale(1.08);
             z-index: 0;
         }
 
-        /* Card */
+        /* ── Card ── */
         .login-box {
             position: relative;
             z-index: 1;
-            background: rgba(255, 255, 255, 0.97);
-            border-radius: 20px;
-            padding: 2.5rem 2.5rem 2rem;
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            padding: 2.8rem 2.5rem 2.2rem;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            max-width: 420px;
+            border: 2px solid rgba(255,255,255,0.6);
+            box-shadow: 0 24px 80px rgba(0,0,0,0.35), 0 2px 0 rgba(255,255,255,0.5) inset;
         }
 
-        /* Logo + branding */
+        /* ── Logo ── */
         .login-brand {
             text-align: center;
-            margin-bottom: 1.8rem;
+            margin-bottom: 2rem;
         }
 
-        .login-brand .logo-circle {
-            width: 85px; height: 85px;
+        .logo-circle {
+            width: 80px; height: 80px;
             background: white;
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             margin: 0 auto 1rem;
-            box-shadow: 0 4px 20px rgba(26,58,92,0.2);
-            border: 3px solid #dce3ed;
+            border: 2.5px solid var(--border);
+            box-shadow: 0 4px 16px rgba(26,58,92,0.12);
             overflow: hidden;
         }
 
-        .login-brand .logo-circle img {
-            width: 65px; height: 65px;
+        .logo-circle img {
+            width: 62px; height: 62px;
             object-fit: contain;
         }
 
         .login-brand h1 {
-            font-family: 'Syne', sans-serif;
-            font-size: 1.3rem;
-            font-weight: 800;
-            color: #1a3a5c;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -0.3px;
             line-height: 1.3;
         }
 
         .login-brand .subtitle {
             display: inline-block;
             margin-top: 0.5rem;
-            background: #1a3a5c;
+            background: var(--primary);
             color: white;
-            font-size: 0.72rem;
+            font-size: 0.7rem;
             font-weight: 700;
             letter-spacing: 2px;
             text-transform: uppercase;
@@ -129,103 +147,185 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             border-radius: 20px;
         }
 
-        /* Sign in label */
-        .sign-in-label {
-            font-size: 0.82rem;
-            color: #7a8b9a;
+        /* ── Alert ── */
+        .alert {
+            padding: 11px 14px;
+            border-radius: 10px;
+            margin-bottom: 1.2rem;
+            font-size: 0.875rem;
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .alert-error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1.5px solid #fecaca;
+        }
+        .alert-icon {
+            width: 18px; height: 18px;
+            flex-shrink: 0;
+        }
+
+        /* ── Form label ── */
+        .sign-in-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
             margin-bottom: 1.2rem;
         }
 
-        /* Inputs */
-        .input-wrap {
-            position: relative;
+        /* ── Input fields ── */
+        .field {
             margin-bottom: 1rem;
         }
 
-        .input-wrap .icon {
+        .field label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+            letter-spacing: 0.2px;
+        }
+
+        .input-wrap {
+            position: relative;
+        }
+
+        .input-icon {
             position: absolute;
-            left: 13px;
+            left: 14px;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 1rem;
-            color: #7a8b9a;
+            width: 18px; height: 18px;
+            color: var(--muted);
             pointer-events: none;
+            flex-shrink: 0;
         }
 
         .input-wrap input {
             width: 100%;
-            padding: 12px 42px;
-            border: 1.5px solid #dce3ed;
-            border-radius: 10px;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.9rem;
-            color: #1e2a3a;
-            background: #f4f6fa;
+            padding: 12px 42px 12px 44px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            font-family: inherit;
+            font-size: 0.92rem;
+            color: var(--text);
+            background: var(--input-bg);
             outline: none;
-            transition: border-color 0.2s, background 0.2s;
+            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
         }
 
         .input-wrap input:focus {
-            border-color: #1a3a5c;
-            background: white;
+            border-color: var(--border-focus);
+            background: var(--white);
+            box-shadow: 0 0 0 3px rgba(26,58,92,0.08);
         }
 
-        .input-wrap .toggle-pw {
+        .input-wrap input::placeholder {
+            color: #a0aec0;
+        }
+
+        .toggle-pw {
             position: absolute;
-            right: 13px;
+            right: 12px;
             top: 50%;
             transform: translateY(-50%);
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 0.9rem;
-            color: #7a8b9a;
-            padding: 0;
+            padding: 4px;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: color 0.2s, background 0.2s;
         }
 
-        /* Login button */
+        .toggle-pw:hover {
+            color: var(--primary);
+            background: rgba(26,58,92,0.06);
+        }
+
+        /* ── Login Button ── */
         .login-btn {
             width: 100%;
             padding: 13px;
-            background: #1a3a5c;
+            margin-top: 0.6rem;
+            background: var(--primary);
             color: white;
-            border: none;
-            border-radius: 10px;
-            font-family: 'Syne', sans-serif;
-            font-size: 0.9rem;
+            border: 2px solid var(--primary);
+            border-radius: var(--radius);
+            font-family: inherit;
+            font-size: 0.92rem;
             font-weight: 700;
-            letter-spacing: 1.5px;
+            letter-spacing: 1px;
             text-transform: uppercase;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-            margin-top: 0.4rem;
+            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        .login-btn:hover  { background: #14304d; }
-        .login-btn:active { transform: scale(0.98); }
+        .login-btn:hover {
+            background: #14304d;
+            border-color: #14304d;
+            box-shadow: 0 4px 16px rgba(26,58,92,0.25);
+        }
 
-        /* Register link */
+        .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* ── Divider ── */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 1.4rem 0 1.2rem;
+        }
+
+        .divider::before, .divider::after {
+            content: '';
+            flex: 1;
+            height: 1.5px;
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        .divider span {
+            font-size: 0.78rem;
+            color: var(--muted);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        /* ── Register link ── */
         .register-link {
             text-align: center;
-            margin-top: 1.2rem;
-            font-size: 0.83rem;
-            color: #7a8b9a;
+            font-size: 0.85rem;
+            color: var(--muted);
         }
 
         .register-link a {
-            color: #1a3a5c;
+            color: var(--primary);
             font-weight: 700;
             text-decoration: none;
         }
 
-        .register-link a:hover { text-decoration: underline; }
+        .register-link a:hover {
+            text-decoration: underline;
+        }
 
-        /* Divider */
-        .divider {
-            border: none;
-            border-top: 1.5px solid #dce3ed;
-            margin: 1.4rem 0 1.2rem;
+        @media (max-width: 480px) {
+            .login-box { padding: 2rem 1.5rem 1.8rem; }
         }
     </style>
 </head>
@@ -243,28 +343,65 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
         </div>
 
         <?php if ($error): ?>
-            <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+        <div class="alert alert-error">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <?= htmlspecialchars($error) ?>
+        </div>
         <?php endif; ?>
+
         <?php if ($unauthorized): ?>
-            <div class="alert alert-error">You are not authorized to access that page.</div>
+        <div class="alert alert-error">
+            <svg class="alert-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            You are not authorized to access that page.
+        </div>
         <?php endif; ?>
 
         <div class="sign-in-label">Sign in to continue</div>
 
         <form method="POST">
-            <div class="input-wrap">
-                <span class="icon">👤</span>
-                <input type="text" name="username" placeholder="Username" required autofocus>
+            <div class="field">
+                <label for="username">Username</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                    <input type="text" id="username" name="username" placeholder="Enter your username" required autofocus>
+                </div>
             </div>
-            <div class="input-wrap">
-                <span class="icon">🔒</span>
-                <input type="password" name="password" id="pwInput" placeholder="Password" required>
-                <button type="button" class="toggle-pw" onclick="togglePw()" id="toggleBtn">🙈</button>
+
+            <div class="field">
+                <label for="pwInput">Password</label>
+                <div class="input-wrap">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                    <input type="password" id="pwInput" name="password" placeholder="Enter your password" required>
+                    <button type="button" class="toggle-pw" onclick="togglePw()" id="toggleBtn" title="Show/hide password">
+                        <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <button type="submit" class="login-btn">Login</button>
+
+            <button type="submit" class="login-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                    <polyline points="10 17 15 12 10 7"/>
+                    <line x1="15" y1="12" x2="3" y2="12"/>
+                </svg>
+                Login
+            </button>
         </form>
 
-        <hr class="divider">
+        <div class="divider"><span>or</span></div>
 
         <div class="register-link">
             Don't have an account? <a href="<?= BASE_URL ?>register.php">Register here</a>
@@ -273,16 +410,15 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
 </div>
 
 <script>
+const eyeOpen = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+const eyeClosed = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+
 function togglePw() {
-    const input = document.getElementById('pwInput');
-    const btn   = document.getElementById('toggleBtn');
-    if (input.type === 'password') {
-        input.type = 'text';
-        btn.textContent = '👁️';
-    } else {
-        input.type = 'password';
-        btn.textContent = '🙈';
-    }
+    const input   = document.getElementById('pwInput');
+    const icon    = document.getElementById('eyeIcon');
+    const isHidden = input.type === 'password';
+    input.type    = isHidden ? 'text' : 'password';
+    icon.innerHTML = isHidden ? eyeClosed : eyeOpen;
 }
 </script>
 </body>
