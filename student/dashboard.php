@@ -36,95 +36,6 @@ while ($row = $violations->fetch_assoc()) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SVS — Student Dashboard</title>
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
-    <style>
-        .student-card {
-            background: linear-gradient(135deg, #0d1b3e 0%, #1a3a5c 100%);
-            border-radius: 14px;
-            padding: 1.8rem;
-            margin-bottom: 1.5rem;
-            border: none;
-        }
-
-        .student-card-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.2rem;
-            flex-wrap: wrap;
-        }
-
-        .student-avatar {
-            width: 48px; height: 48px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.4rem;
-            flex-shrink: 0;
-        }
-
-        .student-card-name {
-            color: white;
-            font-family: 'Syne', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 800;
-        }
-
-        .student-card-no {
-            color: rgba(255,255,255,0.6);
-            font-size: 0.8rem;
-            margin-top: 2px;
-        }
-
-        .student-card-badge {
-            background: rgba(255,255,255,0.15);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.78rem;
-            font-weight: 600;
-            white-space: nowrap;
-        }
-
-        .student-info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 0.8rem;
-        }
-
-        .student-info-item {
-            background: rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 0.8rem 1rem;
-        }
-
-        .student-info-label {
-            color: rgba(255,255,255,0.5);
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .student-info-value {
-            color: white;
-            font-weight: 700;
-            margin-top: 4px;
-            font-size: 0.9rem;
-        }
-
-        /* Fix stat icon */
-        .stat-icon {
-            width: 44px;
-            height: 44px;
-            min-width: 44px;
-            min-height: 44px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            flex-shrink: 0;
-        }
-    </style>
 </head>
 <body>
 <?php include '../includes/navbar.php'; ?>
@@ -199,7 +110,7 @@ while ($row = $violations->fetch_assoc()) {
             <input type="text" id="searchInput" class="form-control"
                    placeholder="🔍 Search violations..."
                    oninput="searchTable()"
-                   style="max-width:280px; margin:0;">
+                   style="max-width:260px; margin:0;">
         </div>
         <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
 
@@ -226,7 +137,7 @@ while ($row = $violations->fetch_assoc()) {
                     <tr>
                         <td><?= $i + 1 ?></td>
                         <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
-                        <td><?= htmlspecialchars($v['description'] ?? '—') ?></td>
+                        <td style="color:var(--muted);"><?= htmlspecialchars($v['description'] ?? '—') ?></td>
                         <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
                         <td><?= htmlspecialchars($v['recorded_by_name']) ?></td>
                         <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
@@ -235,7 +146,7 @@ while ($row = $violations->fetch_assoc()) {
                 </tbody>
             </table>
         </div>
-        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem;">
+        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:0.88rem;">
             No violations match your search.
         </p>
         <?php endif; ?>
@@ -244,9 +155,9 @@ while ($row = $violations->fetch_assoc()) {
 
 <script>
 function searchTable() {
-    const input  = document.getElementById('searchInput').value.toLowerCase();
-    const rows   = document.querySelectorAll('#violationsTable tbody tr');
-    let visible  = 0;
+    const input = document.getElementById('searchInput').value.toLowerCase();
+    const rows  = document.querySelectorAll('#violationsTable tbody tr');
+    let visible = 0;
     rows.forEach(row => {
         const match = row.innerText.toLowerCase().includes(input);
         row.style.display = match ? '' : 'none';

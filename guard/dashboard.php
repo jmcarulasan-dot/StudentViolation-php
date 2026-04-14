@@ -36,9 +36,9 @@ $violations = $conn->query("
     JOIN users u ON v.recorded_by = u.id
     ORDER BY v.date_recorded DESC
 ");
-$rows    = $violations->fetch_all(MYSQLI_ASSOC);
-$total   = count($rows);
-$pending = count(array_filter($rows, fn($r) => $r['status'] === 'pending'));
+$rows     = $violations->fetch_all(MYSQLI_ASSOC);
+$total    = count($rows);
+$pending  = count(array_filter($rows, fn($r) => $r['status'] === 'pending'));
 $resolved = $total - $pending;
 
 $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
@@ -95,7 +95,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
         <form method="POST">
             <div class="form-row">
                 <div class="form-group">
-                    <label>Student No. <span style="color:red">*</span></label>
+                    <label>Student No. <span style="color:var(--accent)">*</span></label>
                     <input type="text" name="student_no" class="form-control"
                            list="students-list"
                            placeholder="e.g. C26-01-0001-MAN121"
@@ -108,7 +108,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
                     </datalist>
                 </div>
                 <div class="form-group">
-                    <label>Violation Type <span style="color:red">*</span></label>
+                    <label>Violation Type <span style="color:var(--accent)">*</span></label>
                     <select name="violation_type" class="form-control" required>
                         <option value="">-- Select Type --</option>
                         <option>Late</option>
@@ -123,7 +123,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Date <span style="color:red">*</span></label>
+                    <label>Date <span style="color:var(--accent)">*</span></label>
                     <input type="date" name="date_recorded" class="form-control" value="<?= date('Y-m-d') ?>" required>
                 </div>
                 <div class="form-group">
@@ -142,7 +142,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
             <input type="text" id="searchInput" class="form-control"
                    placeholder="🔍 Search violations..."
                    oninput="searchTable()"
-                   style="max-width:280px; margin:0;">
+                   style="max-width:260px; margin:0;">
         </div>
         <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
 
@@ -168,7 +168,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
                     <?php foreach ($rows as $i => $v): ?>
                     <tr>
                         <td><?= $i + 1 ?></td>
-                        <td><code><?= htmlspecialchars($v['student_no']) ?></code></td>
+                        <td><code style="font-size:0.82rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
                         <td><?= htmlspecialchars($v['student_name']) ?></td>
                         <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
                         <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
@@ -178,7 +178,7 @@ $students = $conn->query("SELECT student_no, name FROM students ORDER BY name");
                 </tbody>
             </table>
         </div>
-        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem;">No results found.</p>
+        <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:0.88rem;">No results found.</p>
         <?php endif; ?>
     </div>
 </div>

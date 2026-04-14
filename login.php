@@ -3,9 +3,9 @@ require_once 'includes/config.php';
 
 if (isLoggedIn()) {
     $role = $_SESSION['role'];
-    if ($role === 'student')  header("Location: " . BASE_URL . "student/dashboard.php");
-    if ($role === 'guard')    header("Location: " . BASE_URL . "guard/dashboard.php");
-    if ($role === 'guidance') header("Location: " . BASE_URL . "guidance/dashboard.php");
+    if ($role === 'student')  { header("Location: " . BASE_URL . "student/dashboard.php"); exit(); }
+    if ($role === 'guard')    { header("Location: " . BASE_URL . "guard/dashboard.php");   exit(); }
+    if ($role === 'guidance') { header("Location: " . BASE_URL . "guidance/dashboard.php"); exit(); }
     exit();
 }
 
@@ -22,15 +22,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->get_result()->fetch_assoc();
 
         if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id']    = $user['id'];
+            $_SESSION['user_id']    = (int)$user['id'];
             $_SESSION['name']       = $user['name'];
             $_SESSION['username']   = $user['username'];
             $_SESSION['role']       = $user['role'];
-            $_SESSION['student_id'] = $user['student_id'];
+            $_SESSION['student_id'] = (int)$user['student_id'];
 
-            if ($user['role'] === 'student')  header("Location: " . BASE_URL . "student/dashboard.php");
-            if ($user['role'] === 'guard')    header("Location: " . BASE_URL . "guard/dashboard.php");
-            if ($user['role'] === 'guidance') header("Location: " . BASE_URL . "guidance/dashboard.php");
+            session_write_close();
+            session_start();
+
+            if ($user['role'] === 'student')  { header("Location: " . BASE_URL . "student/dashboard.php");  exit(); }
+            if ($user['role'] === 'guard')    { header("Location: " . BASE_URL . "guard/dashboard.php");    exit(); }
+            if ($user['role'] === 'guidance') { header("Location: " . BASE_URL . "guidance/dashboard.php"); exit(); }
             exit();
         } else {
             $error = "Invalid username or password.";
@@ -71,7 +74,6 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             background: var(--bg);
         }
 
-        /* ── Background ── */
         .login-page {
             min-height: 100vh;
             display: flex;
@@ -91,7 +93,6 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             z-index: 0;
         }
 
-        /* ── Card ── */
         .login-box {
             position: relative;
             z-index: 1;
@@ -104,11 +105,7 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             box-shadow: 0 24px 80px rgba(0,0,0,0.35), 0 2px 0 rgba(255,255,255,0.5) inset;
         }
 
-        /* ── Logo ── */
-        .login-brand {
-            text-align: center;
-            margin-bottom: 2rem;
-        }
+        .login-brand { text-align: center; margin-bottom: 2rem; }
 
         .logo-circle {
             width: 80px; height: 80px;
@@ -121,10 +118,7 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             overflow: hidden;
         }
 
-        .logo-circle img {
-            width: 62px; height: 62px;
-            object-fit: contain;
-        }
+        .logo-circle img { width: 62px; height: 62px; object-fit: contain; }
 
         .login-brand h1 {
             font-size: 1.25rem;
@@ -147,7 +141,6 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             border-radius: 20px;
         }
 
-        /* ── Alert ── */
         .alert {
             padding: 11px 14px;
             border-radius: 10px;
@@ -158,17 +151,15 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             align-items: center;
             gap: 8px;
         }
+
         .alert-error {
             background: #fef2f2;
             color: #991b1b;
             border: 1.5px solid #fecaca;
         }
-        .alert-icon {
-            width: 18px; height: 18px;
-            flex-shrink: 0;
-        }
 
-        /* ── Form label ── */
+        .alert-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
         .sign-in-label {
             font-size: 0.8rem;
             font-weight: 600;
@@ -178,10 +169,7 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             margin-bottom: 1.2rem;
         }
 
-        /* ── Input fields ── */
-        .field {
-            margin-bottom: 1rem;
-        }
+        .field { margin-bottom: 1rem; }
 
         .field label {
             display: block;
@@ -192,9 +180,7 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             letter-spacing: 0.2px;
         }
 
-        .input-wrap {
-            position: relative;
-        }
+        .input-wrap { position: relative; }
 
         .input-icon {
             position: absolute;
@@ -226,9 +212,7 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             box-shadow: 0 0 0 3px rgba(26,58,92,0.08);
         }
 
-        .input-wrap input::placeholder {
-            color: #a0aec0;
-        }
+        .input-wrap input::placeholder { color: #a0aec0; }
 
         .toggle-pw {
             position: absolute;
@@ -247,12 +231,8 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             transition: color 0.2s, background 0.2s;
         }
 
-        .toggle-pw:hover {
-            color: var(--primary);
-            background: rgba(26,58,92,0.06);
-        }
+        .toggle-pw:hover { color: var(--primary); background: rgba(26,58,92,0.06); }
 
-        /* ── Login Button ── */
         .login-btn {
             width: 100%;
             padding: 13px;
@@ -280,11 +260,8 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             box-shadow: 0 4px 16px rgba(26,58,92,0.25);
         }
 
-        .login-btn:active {
-            transform: scale(0.98);
-        }
+        .login-btn:active { transform: scale(0.98); }
 
-        /* ── Divider ── */
         .divider {
             display: flex;
             align-items: center;
@@ -300,29 +277,11 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
             border-radius: 2px;
         }
 
-        .divider span {
-            font-size: 0.78rem;
-            color: var(--muted);
-            font-weight: 500;
-            white-space: nowrap;
-        }
+        .divider span { font-size: 0.78rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
 
-        /* ── Register link ── */
-        .register-link {
-            text-align: center;
-            font-size: 0.85rem;
-            color: var(--muted);
-        }
-
-        .register-link a {
-            color: var(--primary);
-            font-weight: 700;
-            text-decoration: none;
-        }
-
-        .register-link a:hover {
-            text-decoration: underline;
-        }
+        .register-link { text-align: center; font-size: 0.85rem; color: var(--muted); }
+        .register-link a { color: var(--primary); font-weight: 700; text-decoration: none; }
+        .register-link a:hover { text-decoration: underline; }
 
         @media (max-width: 480px) {
             .login-box { padding: 2rem 1.5rem 1.8rem; }
@@ -410,14 +369,14 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
 </div>
 
 <script>
-const eyeOpen = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+const eyeOpen   = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
 const eyeClosed = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
 
 function togglePw() {
-    const input   = document.getElementById('pwInput');
-    const icon    = document.getElementById('eyeIcon');
+    const input    = document.getElementById('pwInput');
+    const icon     = document.getElementById('eyeIcon');
     const isHidden = input.type === 'password';
-    input.type    = isHidden ? 'text' : 'password';
+    input.type     = isHidden ? 'text' : 'password';
     icon.innerHTML = isHidden ? eyeClosed : eyeOpen;
 }
 </script>

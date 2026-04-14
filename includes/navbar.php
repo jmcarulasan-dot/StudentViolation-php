@@ -1,4 +1,10 @@
 <?php
+if (!defined('FONT_LOADED')): define('FONT_LOADED', true); ?>
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=plus-jakarta-sans:300,400,500,600,700,800&display=swap" rel="stylesheet">
+<?php endif; ?>
+
+<?php
 $role = $_SESSION['role'] ?? '';
 $name = $_SESSION['name'] ?? '';
 $roleLabel = ucfirst($role);
