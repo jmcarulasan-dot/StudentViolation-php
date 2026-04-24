@@ -22,7 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $new_student_id = $conn->insert_id;
             $stmt2 = $conn->prepare("INSERT INTO users (name, username, password, role, student_id) VALUES (?,?,?,'student',?)");
             $stmt2->bind_param("sssi", $name, $username, $password, $new_student_id);
-            $stmt2->execute() ? $success = "Student added successfully!" : $error = "Student added but failed to create login: " . $conn->error;
+            $stmt2->execute()
+                ? $success = "Student added successfully!"
+                : $error   = "Student added but failed to create login.";
         } else {
             $error = "Failed to add student. Student No. may already exist.";
         }
@@ -44,9 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $date_recorded  = $_POST['date_recorded'];
         $status         = $_POST['status'];
 
-        $stmt = $conn->prepare("UPDATE violations SET violation_type = ?, description = ?, date_recorded = ?, status = ? WHERE id = ?");
+        $stmt = $conn->prepare("UPDATE violations SET violation_type=?, description=?, date_recorded=?, status=? WHERE id=?");
         $stmt->bind_param("ssssi", $violation_type, $description, $date_recorded, $status, $vid);
-        $stmt->execute() ? $success = "Violation updated successfully!" : $error = "Failed to update violation.";
+        $stmt->execute() ? $success = "Violation updated!" : $error = "Failed to update violation.";
     }
 
     if ($action === 'delete_violation') {
@@ -59,20 +61,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'delete_student') {
         $sid  = intval($_POST['student_id']);
-        $stmt = $conn->prepare("DELETE FROM violations WHERE student_id = ?");
-        $stmt->bind_param("i", $sid);
-        $stmt->execute();
-        $stmt = $conn->prepare("DELETE FROM users WHERE student_id = ?");
-        $stmt->bind_param("i", $sid);
-        $stmt->execute();
-        $stmt = $conn->prepare("DELETE FROM students WHERE id = ?");
-        $stmt->bind_param("i", $sid);
-        $stmt->execute();
+        foreach (["DELETE FROM violations WHERE student_id=?","DELETE FROM users WHERE student_id=?","DELETE FROM students WHERE id=?"] as $sql) {
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("i", $sid);
+            $stmt->execute();
+        }
         $success = "Student and all related records deleted.";
     }
 }
 
-// ── Core data ──────────────────────────────────────────────
+// ── Data ───────────────────────────────────────────────────
 $students   = $conn->query("SELECT * FROM students ORDER BY name")->fetch_all(MYSQLI_ASSOC);
 $violations = $conn->query("
     SELECT v.*, s.name AS student_name, s.student_no, s.course, u.name AS recorded_by_name
@@ -88,7 +86,7 @@ $pendingCount    = count(array_filter($violations, fn($v) => $v['status'] === 'p
 $resolvedCount   = $totalViolations - $pendingCount;
 $recentCount     = count(array_filter($violations, fn($v) => strtotime($v['date_recorded']) >= strtotime('-7 days')));
 
-// ── Monthly trend (last 6 months) ─────────────────────────
+// Monthly trend
 $monthlyData = [];
 for ($i = 5; $i >= 0; $i--) {
     $label = date('M Y', strtotime("-$i months"));
@@ -99,7 +97,7 @@ foreach ($violations as $v) {
     if (isset($monthlyData[$label])) $monthlyData[$label]++;
 }
 
-// ── By type ────────────────────────────────────────────────
+// By type
 $typeData = [];
 foreach ($violations as $v) {
     $t = $v['violation_type'];
@@ -107,42 +105,34 @@ foreach ($violations as $v) {
 }
 arsort($typeData);
 
-// ── By course ──────────────────────────────────────────────
-$courseResult = $conn->query("
-    SELECT s.course, COUNT(v.id) AS cnt
-    FROM violations v JOIN students s ON v.student_id = s.id
-    GROUP BY s.course ORDER BY cnt DESC
-");
+// By course
+$cr = $conn->query("SELECT s.course, COUNT(v.id) AS cnt FROM violations v JOIN students s ON v.student_id=s.id GROUP BY s.course ORDER BY cnt DESC");
 $courseData = [];
-while ($row = $courseResult->fetch_assoc()) {
-    $courseData[$row['course']] = (int)$row['cnt'];
-}
+while ($row = $cr->fetch_assoc()) $courseData[$row['course']] = (int)$row['cnt'];
 
-// ── Stacked monthly pending vs resolved ───────────────────
+// Stacked monthly
 $statusMonthly = [];
 for ($i = 5; $i >= 0; $i--) {
     $label = date('M Y', strtotime("-$i months"));
-    $statusMonthly[$label] = ['pending' => 0, 'resolved' => 0];
+    $statusMonthly[$label] = ['pending'=>0,'resolved'=>0];
 }
 foreach ($violations as $v) {
     $label = date('M Y', strtotime($v['date_recorded']));
     if (isset($statusMonthly[$label])) $statusMonthly[$label][$v['status']]++;
 }
 
-// ── Top 5 students ─────────────────────────────────────────
+// Top 5 students
 $topStudents = $conn->query("
     SELECT s.name, s.student_no, COUNT(v.id) AS cnt
-    FROM violations v JOIN students s ON v.student_id = s.id
+    FROM violations v JOIN students s ON v.student_id=s.id
     GROUP BY s.id ORDER BY cnt DESC LIMIT 5
 ")->fetch_all(MYSQLI_ASSOC);
 
-// ── Violation count per student (for students tab) ─────────
+// Violation count per student
 $vcounts = [];
-foreach ($violations as $v) {
-    $vcounts[$v['student_no']] = ($vcounts[$v['student_no']] ?? 0) + 1;
-}
+foreach ($violations as $v) $vcounts[$v['student_no']] = ($vcounts[$v['student_no']] ?? 0) + 1;
 
-// ── Restore active tab after POST ─────────────────────────
+// Active tab after POST
 $activeTab = 'overview';
 if ($_POST) {
     $act = $_POST['action'] ?? '';
@@ -160,87 +150,22 @@ if ($_POST) {
     <link rel="stylesheet" href="<?= BASE_URL ?>assets/css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <style>
-        .modal-overlay {
-            display:none; position:fixed; inset:0;
-            background:rgba(0,0,0,0.45); z-index:999;
-            align-items:center; justify-content:center;
-            backdrop-filter:blur(2px);
-        }
+        .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.48); z-index:999; align-items:center; justify-content:center; backdrop-filter:blur(2px); }
         .modal-overlay.active { display:flex; }
         .action-form { display:inline; }
 
-        /* ── Tabs ── */
-        .tabs {
-            display:flex; gap:0; margin-bottom:1.5rem;
-            border-bottom:2px solid var(--border);
-            overflow-x:auto;
-        }
-        .tab-btn {
-            padding:11px 20px; border:none;
-            border-bottom:3px solid transparent;
-            background:transparent; font-family:var(--font);
-            font-weight:700; font-size:0.84rem;
-            cursor:pointer; color:var(--muted);
-            transition:all 0.2s; white-space:nowrap;
-            margin-bottom:-2px;
-        }
-        .tab-btn:hover:not(.active) { color:var(--primary); background:rgba(26,58,92,0.04); }
-        .tab-btn.active { color:var(--primary); border-bottom-color:var(--primary); background:rgba(26,58,92,0.04); }
-        .tab-content { display:none; }
-        .tab-content.active { display:block; }
-
-        /* ── Chart cards ── */
-        .chart-card {
-            background:var(--white); border-radius:var(--radius);
-            box-shadow:var(--card-shadow); padding:1.4rem;
-            border:1px solid var(--border);
-        }
-        .chart-title {
-            font-size:0.78rem; font-weight:700; color:var(--primary);
-            text-transform:uppercase; letter-spacing:0.5px;
-            margin-bottom:1rem; display:flex; align-items:center; gap:6px;
-        }
-        .cdot { width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0; }
-        .cwrap { position:relative; height:220px; }
-        .cwrap.tall { height:260px; }
-
-        .g2 { display:grid; grid-template-columns:2fr 1fr; gap:1rem; margin-bottom:1rem; }
-        .g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem; }
-        .g1 { margin-bottom:1rem; }
-
-        /* ── Mini stat cards ── */
-        .mini-row {
-            display:grid; grid-template-columns:repeat(5,1fr);
-            gap:.75rem; margin-bottom:1rem;
-        }
-        .mini-card {
-            background:var(--white); border-radius:10px;
-            border:1px solid var(--border); box-shadow:var(--card-shadow);
-            padding:.9rem 1rem; display:flex; align-items:center; gap:.7rem;
-        }
-        .mini-icon { width:38px; height:38px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
-        .mini-num  { font-size:1.55rem; font-weight:800; color:var(--primary); line-height:1; letter-spacing:-1px; }
-        .mini-lbl  { font-size:0.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:600; margin-top:2px; }
-        .mini-card.acc  .mini-num { color:var(--accent); }
-        .mini-card.grn  .mini-num { color:var(--success); }
-        .mini-card.gld  .mini-num { color:var(--gold); }
-        .mini-card.pur  .mini-num { color:#8b5cf6; }
-
-        /* ── Top students ── */
-        .top-item { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+        /* Top students */
+        .top-item { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
         .top-item:last-child { border-bottom:none; }
         .top-rank { width:26px; height:26px; border-radius:50%; background:var(--primary); color:white; font-size:.7rem; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
         .top-rank.gold   { background:#f0a500; }
         .top-rank.silver { background:#94a3b8; }
         .top-rank.bronze { background:#b45309; }
         .top-info { flex:1; min-width:0; }
-        .top-info strong { display:block; font-size:.83rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .top-info strong { display:block; font-size:.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .top-info span   { font-size:.7rem; color:var(--muted); }
-        .bar-mini { height:5px; border-radius:3px; background:var(--accent); margin-top:3px; }
+        .bar-mini { height:5px; border-radius:3px; background:var(--accent); margin-top:4px; transition:width .6s ease; }
         .top-cnt  { font-size:.95rem; font-weight:800; color:var(--accent); min-width:24px; text-align:right; }
-
-        @media(max-width:960px) { .g2,.g3 { grid-template-columns:1fr; } .mini-row { grid-template-columns:repeat(3,1fr); } }
-        @media(max-width:600px) { .mini-row { grid-template-columns:1fr 1fr; } }
     </style>
 </head>
 <body>
@@ -252,10 +177,10 @@ if ($_POST) {
         <div class="modal-title">✏️ Edit Violation</div>
         <form method="POST">
             <input type="hidden" name="action" value="edit_violation">
-            <input type="hidden" name="violation_id" id="edit_violation_id">
+            <input type="hidden" name="violation_id" id="edit_vid">
             <div class="form-group">
                 <label>Violation Type <span style="color:var(--accent)">*</span></label>
-                <select name="violation_type" id="edit_violation_type" class="form-control" required>
+                <select name="violation_type" id="edit_type" class="form-control" required>
                     <option>Late</option><option>Cutting Class</option>
                     <option>Improper Uniform</option><option>Disruptive Behavior</option>
                     <option>Vandalism</option><option>Prohibited Items</option><option>Other</option>
@@ -263,7 +188,7 @@ if ($_POST) {
             </div>
             <div class="form-group">
                 <label>Description</label>
-                <input type="text" name="description" id="edit_description" class="form-control">
+                <input type="text" name="description" id="edit_desc" class="form-control">
             </div>
             <div class="form-row">
                 <div class="form-group">
@@ -289,22 +214,28 @@ if ($_POST) {
 <div class="page-wrapper">
     <div class="page-header">
         <h2>Guidance Admin Dashboard</h2>
-        <p>Full control over students, violation records, and analytics.</p>
+        <p>Full control over students, violations, and analytics.</p>
     </div>
 
-    <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
-    <?php if ($error):   ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+    <?php if ($success): ?><div class="alert alert-success">✅ <?= htmlspecialchars($success) ?></div><?php endif; ?>
+    <?php if ($error):   ?><div class="alert alert-error">❌ <?= htmlspecialchars($error) ?></div><?php endif; ?>
 
     <!-- ══ TABS ══ -->
     <div class="tabs">
         <button class="tab-btn" id="btn-overview"    onclick="switchTab('overview',this)">📊 Overview</button>
         <button class="tab-btn" id="btn-analytics"   onclick="switchTab('analytics',this)">📈 Analytics</button>
-        <button class="tab-btn" id="btn-violations"  onclick="switchTab('violations',this)">📂 Violations <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:.72rem;margin-left:4px;"><?= $totalViolations ?></span></button>
-        <button class="tab-btn" id="btn-students"    onclick="switchTab('students',this)">👥 Students <span style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 7px;font-size:.72rem;margin-left:4px;"><?= $totalStudents ?></span></button>
+        <button class="tab-btn" id="btn-violations"  onclick="switchTab('violations',this)">
+            📂 Violations
+            <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:.68rem;margin-left:5px;"><?= $totalViolations ?></span>
+        </button>
+        <button class="tab-btn" id="btn-students"    onclick="switchTab('students',this)">
+            👥 Students
+            <span style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 8px;font-size:.68rem;margin-left:5px;"><?= $totalStudents ?></span>
+        </button>
         <button class="tab-btn" id="btn-add-student" onclick="switchTab('add-student',this)">➕ Add Student</button>
     </div>
 
-    <!-- ══ TAB: OVERVIEW ══ -->
+    <!-- ══ OVERVIEW ══ -->
     <div id="tab-overview" class="tab-content">
         <!-- Mini stat cards -->
         <div class="mini-row">
@@ -314,7 +245,7 @@ if ($_POST) {
             </div>
             <div class="mini-card gld">
                 <div class="mini-icon" style="background:#fef3c7;">📋</div>
-                <div><div class="mini-num"><?= $totalViolations ?></div><div class="mini-lbl">Total Violations</div></div>
+                <div><div class="mini-num"><?= $totalViolations ?></div><div class="mini-lbl">Violations</div></div>
             </div>
             <div class="mini-card acc">
                 <div class="mini-icon" style="background:#fee2e2;">⚠️</div>
@@ -343,11 +274,11 @@ if ($_POST) {
         </div>
 
         <!-- Top 5 + Recent -->
-        <div class="g2">
+        <div class="g2e">
             <div class="chart-card">
-                <div class="chart-title"><span class="cdot" style="background:var(--accent);"></span>Top 5 — Most Violations</div>
+                <div class="chart-title"><span class="cdot" style="background:var(--accent);"></span>Top 5 Students — Most Violations</div>
                 <?php if (empty($topStudents)): ?>
-                    <p style="color:var(--muted); font-size:.85rem; text-align:center; padding:1rem 0;">No data yet.</p>
+                    <p style="color:var(--muted); font-size:.85rem; text-align:center; padding:2rem 0;">No data yet.</p>
                 <?php else:
                     $maxCnt = $topStudents[0]['cnt'];
                     $rc = ['gold','silver','bronze','',''];
@@ -369,20 +300,20 @@ if ($_POST) {
             <div class="chart-card">
                 <div class="chart-title"><span class="cdot" style="background:#8b5cf6;"></span>5 Most Recent Violations</div>
                 <?php if (empty($violations)): ?>
-                    <p style="color:var(--muted); font-size:.85rem; text-align:center; padding:1rem 0;">None yet.</p>
+                    <p style="color:var(--muted); font-size:.85rem; text-align:center; padding:2rem 0;">None yet.</p>
                 <?php else: ?>
                 <?php foreach (array_slice($violations, 0, 5) as $rv): ?>
                 <div style="padding:8px 0; border-bottom:1px solid var(--border);">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
                         <div>
                             <div style="font-size:.84rem; font-weight:700;"><?= htmlspecialchars($rv['student_name']) ?></div>
-                            <div style="font-size:.74rem; color:var(--muted);"><?= htmlspecialchars($rv['violation_type']) ?> · <?= date('M d, Y', strtotime($rv['date_recorded'])) ?></div>
+                            <div style="font-size:.73rem; color:var(--muted);"><?= htmlspecialchars($rv['violation_type']) ?> · <?= date('M d, Y', strtotime($rv['date_recorded'])) ?></div>
                         </div>
                         <span class="badge badge-<?= $rv['status'] ?>"><?= ucfirst($rv['status']) ?></span>
                     </div>
                 </div>
                 <?php endforeach; ?>
-                <div style="margin-top:.8rem;">
+                <div style="margin-top:.9rem;">
                     <button class="btn btn-outline btn-sm" onclick="switchTab('violations', document.getElementById('btn-violations'))">View All →</button>
                 </div>
                 <?php endif; ?>
@@ -390,10 +321,9 @@ if ($_POST) {
         </div>
     </div>
 
-    <!-- ══ TAB: ANALYTICS ══ -->
+    <!-- ══ ANALYTICS ══ -->
     <div id="tab-analytics" class="tab-content">
-        <!-- Bar by type + Pie by course -->
-        <div class="g2" style="margin-bottom:1rem;">
+        <div class="g2e" style="margin-bottom:1rem;">
             <div class="chart-card">
                 <div class="chart-title"><span class="cdot" style="background:var(--gold);"></span>Violations by Type</div>
                 <div class="cwrap tall"><canvas id="barChart"></canvas></div>
@@ -404,23 +334,24 @@ if ($_POST) {
             </div>
         </div>
 
-        <!-- Stacked bar full width -->
-        <div class="chart-card g1">
+        <div class="chart-card" style="margin-bottom:1rem;">
             <div class="chart-title"><span class="cdot" style="background:var(--success);"></span>Pending vs Resolved — Monthly Breakdown</div>
             <div class="cwrap tall"><canvas id="stackedChart"></canvas></div>
         </div>
 
-        <!-- Breakdown table -->
+        <!-- Type breakdown table -->
         <div class="card">
-            <div class="card-title">📋 Violation Type Breakdown</div>
+            <div class="card-title">📋 Violation Type Summary</div>
             <?php if (empty($typeData)): ?>
                 <div class="empty-state"><div class="empty-icon">📭</div><p>No data yet.</p></div>
             <?php else: ?>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>Violation Type</th><th>Count</th><th>% of Total</th><th style="width:200px;">Visual</th></tr></thead>
+                    <thead><tr><th>Violation Type</th><th>Count</th><th>% Share</th><th style="width:200px;">Bar</th></tr></thead>
                     <tbody>
-                        <?php foreach ($typeData as $type => $cnt): $pct = $totalViolations > 0 ? round(($cnt/$totalViolations)*100, 1) : 0; ?>
+                        <?php foreach ($typeData as $type => $cnt):
+                            $pct = $totalViolations > 0 ? round(($cnt/$totalViolations)*100, 1) : 0;
+                        ?>
                         <tr>
                             <td><strong><?= htmlspecialchars($type) ?></strong></td>
                             <td><?= $cnt ?></td>
@@ -439,13 +370,12 @@ if ($_POST) {
         </div>
     </div>
 
-    <!-- ══ TAB: VIOLATIONS ══ -->
+    <!-- ══ VIOLATIONS ══ -->
     <div id="tab-violations" class="tab-content">
         <div class="card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:.8rem;">
                 <div class="card-title" style="margin:0; border:none; padding:0;">
-                    All Violation Records
-                    <span style="font-size:.8rem; font-weight:600; color:var(--muted); margin-left:8px;">(<?= $totalViolations ?> total)</span>
+                    All Violations <span style="font-size:.8rem; font-weight:600; color:var(--muted); margin-left:6px;">(<?= $totalViolations ?> total)</span>
                 </div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                     <select id="filterStatus" onchange="filterViolations()" class="form-control" style="max-width:140px; margin:0; padding:8px 12px;">
@@ -455,35 +385,41 @@ if ($_POST) {
                     </select>
                     <input type="text" id="searchViolations" class="form-control"
                            placeholder="🔍 Search..." oninput="filterViolations()"
-                           style="max-width:220px; margin:0;">
+                           style="max-width:210px; margin:0;">
                 </div>
             </div>
             <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
+
             <?php if (empty($violations)): ?>
                 <div class="empty-state"><div class="empty-icon">📂</div><p>No violations yet.</p></div>
             <?php else: ?>
             <div class="table-wrap">
                 <table id="violationsTable">
                     <thead>
-                        <tr><th>#</th><th>Student No.</th><th>Student</th><th>Violation</th><th>Date</th><th>Recorded By</th><th>Status</th><th>Actions</th></tr>
+                        <tr><th>#</th><th>Student No.</th><th>Student</th><th>Violation</th><th>Date</th><th>By</th><th>Status</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($violations as $i => $v): ?>
                         <tr data-status="<?= $v['status'] ?>">
                             <td><?= $i+1 ?></td>
-                            <td><code style="font-size:.82rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
+                            <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
                             <td><?= htmlspecialchars($v['student_name']) ?></td>
                             <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
                             <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
-                            <td><?= htmlspecialchars($v['recorded_by_name']) ?></td>
+                            <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($v['recorded_by_name']) ?></td>
                             <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
-                            <td style="display:flex; gap:5px; flex-wrap:wrap;">
-                                <button class="btn btn-sm btn-outline" onclick="openEdit(<?= $v['id'] ?>,'<?= addslashes($v['violation_type']) ?>','<?= addslashes($v['description'] ?? '') ?>','<?= $v['date_recorded'] ?>','<?= $v['status'] ?>')">Edit</button>
+                            <td style="display:flex; gap:4px; flex-wrap:wrap;">
+                                <button class="btn btn-sm btn-outline"
+                                        onclick="openEdit(<?= $v['id'] ?>,'<?= addslashes($v['violation_type']) ?>','<?= addslashes($v['description'] ?? '') ?>','<?= $v['date_recorded'] ?>','<?= $v['status'] ?>')">
+                                    Edit
+                                </button>
                                 <form class="action-form" method="POST">
                                     <input type="hidden" name="action" value="update_status">
                                     <input type="hidden" name="violation_id" value="<?= $v['id'] ?>">
-                                    <input type="hidden" name="status" value="<?= $v['status'] === 'pending' ? 'resolved' : 'pending' ?>">
-                                    <button type="submit" class="btn btn-sm <?= $v['status'] === 'pending' ? 'btn-success' : 'btn-outline' ?>"><?= $v['status'] === 'pending' ? 'Resolve' : 'Reopen' ?></button>
+                                    <input type="hidden" name="status" value="<?= $v['status']==='pending'?'resolved':'pending' ?>">
+                                    <button type="submit" class="btn btn-sm <?= $v['status']==='pending'?'btn-success':'btn-outline' ?>">
+                                        <?= $v['status']==='pending'?'Resolve':'Reopen' ?>
+                                    </button>
                                 </form>
                                 <form class="action-form" method="POST" onsubmit="return confirm('Delete this violation?')">
                                     <input type="hidden" name="action" value="delete_violation">
@@ -496,31 +432,31 @@ if ($_POST) {
                     </tbody>
                 </table>
             </div>
-            <p id="noViolationResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
+            <p id="noVResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
             <?php endif; ?>
         </div>
     </div>
 
-    <!-- ══ TAB: STUDENTS ══ -->
+    <!-- ══ STUDENTS ══ -->
     <div id="tab-students" class="tab-content">
         <div class="card">
             <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:.8rem;">
                 <div class="card-title" style="margin:0; border:none; padding:0;">
-                    All Students
-                    <span style="font-size:.8rem; font-weight:600; color:var(--muted); margin-left:8px;">(<?= $totalStudents ?> enrolled)</span>
+                    All Students <span style="font-size:.8rem; font-weight:600; color:var(--muted); margin-left:6px;">(<?= $totalStudents ?> enrolled)</span>
                 </div>
                 <input type="text" id="searchStudents" class="form-control"
-                       placeholder="🔍 Search students..." oninput="searchTable('studentsTable','searchStudents','noStudentResults')"
+                       placeholder="🔍 Search students..." oninput="searchTable('studentsTable','searchStudents','noSResults')"
                        style="max-width:240px; margin:0;">
             </div>
             <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
+
             <?php if (empty($students)): ?>
                 <div class="empty-state"><div class="empty-icon">👥</div><p>No students yet.</p></div>
             <?php else: ?>
             <div class="table-wrap">
                 <table id="studentsTable">
                     <thead>
-                        <tr><th>#</th><th>Student No.</th><th>Name</th><th>Course</th><th>Year Level</th><th>Violations</th><th>Actions</th></tr>
+                        <tr><th>#</th><th>Student No.</th><th>Name</th><th>Course</th><th>Year</th><th>Violations</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($students as $i => $s):
@@ -528,19 +464,19 @@ if ($_POST) {
                         ?>
                         <tr>
                             <td><?= $i+1 ?></td>
-                            <td><code style="font-size:.82rem; color:var(--primary);"><?= htmlspecialchars($s['student_no']) ?></code></td>
+                            <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($s['student_no']) ?></code></td>
                             <td><?= htmlspecialchars($s['name']) ?></td>
                             <td><?= htmlspecialchars($s['course']) ?></td>
-                            <td>Year <?= $s['year_level'] ?></td>
+                            <td>Yr <?= $s['year_level'] ?></td>
                             <td>
                                 <?php if ($vc > 0): ?>
-                                    <span class="badge" style="background:#fee2e2; color:#991b1b;"><?= $vc ?> violation<?= $vc > 1 ? 's' : '' ?></span>
+                                    <span class="badge" style="background:#fee2e2; color:#991b1b;"><?= $vc ?> violation<?= $vc>1?'s':'' ?></span>
                                 <?php else: ?>
                                     <span class="badge" style="background:#d1fae5; color:#065f46;">Clean</span>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <form class="action-form" method="POST" onsubmit="return confirm('Delete this student and ALL their violations?')">
+                                <form class="action-form" method="POST" onsubmit="return confirm('Delete student and ALL violations?')">
                                     <input type="hidden" name="action" value="delete_student">
                                     <input type="hidden" name="student_id" value="<?= $s['id'] ?>">
                                     <button type="submit" class="btn btn-sm btn-danger">Delete</button>
@@ -551,12 +487,12 @@ if ($_POST) {
                     </tbody>
                 </table>
             </div>
-            <p id="noStudentResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
+            <p id="noSResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
             <?php endif; ?>
         </div>
     </div>
 
-    <!-- ══ TAB: ADD STUDENT ══ -->
+    <!-- ══ ADD STUDENT ══ -->
     <div id="tab-add-student" class="tab-content">
         <div class="card">
             <div class="card-title">➕ Add New Student</div>
@@ -605,10 +541,10 @@ if ($_POST) {
         </div>
     </div>
 
-</div><!-- .page-wrapper -->
+</div>
 
 <script>
-// ── Data ──────────────────────────────────────────────────
+// ── Chart data ─────────────────────────────────────────────
 const monthlyLabels   = <?= json_encode(array_keys($monthlyData)) ?>;
 const monthlyCounts   = <?= json_encode(array_values($monthlyData)) ?>;
 const typeLabels      = <?= json_encode(array_keys($typeData)) ?>;
@@ -617,14 +553,12 @@ const courseLabels    = <?= json_encode(array_keys($courseData)) ?>;
 const courseCounts    = <?= json_encode(array_values($courseData)) ?>;
 const stackedPending  = <?= json_encode(array_column(array_values($statusMonthly),'pending')) ?>;
 const stackedResolved = <?= json_encode(array_column(array_values($statusMonthly),'resolved')) ?>;
-const pendingTotal    = <?= $pendingCount ?>;
-const resolvedTotal   = <?= $resolvedCount ?>;
 
 Chart.defaults.font.family = "'Plus Jakarta Sans','Segoe UI',sans-serif";
 Chart.defaults.font.size   = 12;
 Chart.defaults.color       = '#64748b';
 
-const C = { primary:'#1a3a5c', accent:'#e84545', gold:'#f0a500', green:'#2ecc71', purple:'#8b5cf6', blue:'#3b82f6', teal:'#14b8a6', orange:'#f97316' };
+const C = { primary:'#1a3a5c', accent:'#e84545', gold:'#f0a500', green:'#2ecc71', purple:'#8b5cf6', teal:'#14b8a6', orange:'#f97316', blue:'#3b82f6' };
 const PAL = Object.values(C);
 
 // 1. Line
@@ -637,14 +571,14 @@ new Chart(document.getElementById('lineChart'), {
 // 2. Doughnut
 new Chart(document.getElementById('doughnutChart'), {
     type:'doughnut',
-    data:{ labels:['Pending','Resolved'], datasets:[{ data:[pendingTotal,resolvedTotal], backgroundColor:[C.accent,C.green], borderWidth:2, borderColor:'#fff', hoverOffset:6 }] },
+    data:{ labels:['Pending','Resolved'], datasets:[{ data:[<?= $pendingCount ?>,<?= $resolvedCount ?>], backgroundColor:[C.accent,C.green], borderWidth:2, borderColor:'#fff', hoverOffset:6 }] },
     options:{ responsive:true, maintainAspectRatio:false, cutout:'65%', plugins:{ legend:{ position:'bottom', labels:{padding:16,usePointStyle:true,pointStyleWidth:10} } } }
 });
 
 // 3. Bar by type
 new Chart(document.getElementById('barChart'), {
     type:'bar',
-    data:{ labels:typeLabels, datasets:[{ label:'Count', data:typeCounts, backgroundColor:PAL.slice(0,typeLabels.length), borderRadius:5, borderSkipped:false }] },
+    data:{ labels:typeLabels, datasets:[{ data:typeCounts, backgroundColor:PAL.slice(0,typeLabels.length), borderRadius:5, borderSkipped:false }] },
     options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'rgba(0,0,0,0.05)'}}, y:{grid:{display:false}} } }
 });
 
@@ -677,17 +611,17 @@ switchTab('<?= $activeTab ?>', null);
 
 // ── Modal ─────────────────────────────────────────────────
 function openEdit(id, type, desc, date, status) {
-    document.getElementById('edit_violation_id').value   = id;
-    document.getElementById('edit_violation_type').value = type;
-    document.getElementById('edit_description').value    = desc;
-    document.getElementById('edit_date').value           = date;
-    document.getElementById('edit_status').value         = status;
+    document.getElementById('edit_vid').value    = id;
+    document.getElementById('edit_type').value   = type;
+    document.getElementById('edit_desc').value   = desc;
+    document.getElementById('edit_date').value   = date;
+    document.getElementById('edit_status').value = status;
     document.getElementById('editModal').classList.add('active');
 }
 function closeModal() { document.getElementById('editModal').classList.remove('active'); }
 document.getElementById('editModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
 
-// ── Search ────────────────────────────────────────────────
+// ── Search/Filter ─────────────────────────────────────────
 function searchTable(tId, iId, nId) {
     const q = document.getElementById(iId).value.toLowerCase();
     let vis = 0;
@@ -708,7 +642,7 @@ function filterViolations() {
         r.style.display = show ? '' : 'none';
         if (show) vis++;
     });
-    document.getElementById('noViolationResults').style.display = vis===0 ? 'block' : 'none';
+    document.getElementById('noVResults').style.display = vis===0 ? 'block' : 'none';
 }
 </script>
 </body>
