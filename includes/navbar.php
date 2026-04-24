@@ -23,7 +23,10 @@ $roleColor = $roleColors[$role] ?? '#1a3a5c';
 ?>
 <nav class="navbar">
     <a href="<?= $dashboardLink ?>" class="brand">
-        <div class="nav-logo">🛡️</div>
+        <!-- ACLC Logo instead of shield emoji -->
+        <div class="nav-logo" style="background:white; border-radius:8px; padding:3px;">
+            <img src="<?= BASE_URL ?>assets/image/ACLC.png" alt="ACLC Logo">
+        </div>
         <div class="nav-brand-text">
             <span class="nav-title">ACLC — SVS</span>
             <span class="nav-sub">Student Violation System</span>
@@ -49,7 +52,13 @@ $roleColor = $roleColors[$role] ?? '#1a3a5c';
      onclick="if(event.target===this) this.style.display='none';">
     <div style="background:#fff; border-radius:16px; padding:2rem; max-width:360px;
                 width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.25); text-align:center;">
-        <div style="font-size:2.5rem; margin-bottom:0.8rem;">🛡️</div>
+        <!-- ACLC Logo in modal too -->
+        <div style="width:56px; height:56px; margin:0 auto 0.8rem; border-radius:50%;
+                    background:#f0f4f8; border:2px solid #e2e8f0;
+                    display:flex; align-items:center; justify-content:center; overflow:hidden;">
+            <img src="<?= BASE_URL ?>assets/image/ACLC.png" alt="ACLC"
+                 style="width:40px; height:40px; object-fit:contain;">
+        </div>
         <h3 style="margin:0 0 .4rem; font-size:1.1rem; font-weight:700; color:#1a202c;">Log out?</h3>
         <p style="color:#718096; font-size:.88rem; margin:0 0 1.5rem;">Are you sure you want to end your session?</p>
         <div style="display:flex; gap:10px; justify-content:center;">
