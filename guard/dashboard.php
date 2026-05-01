@@ -9,7 +9,17 @@ $foundStudent = null;
 // Quick student lookup via GET
 if (isset($_GET['lookup']) && $_GET['lookup']) {
     $sno = strtoupper(trim($_GET['lookup']));
-    $stmt = $conn->prepare("SELECT s.*, COUNT(v.id) AS vcount, SUM(v.status='pending') AS vpending FROM students s LEFT JOIN violations v ON v.student_id=s.id WHERE s.student_no=? GROUP BY s.id");
+    $stmt = $conn->prepare("
+        SELECT s.*,
+               COUNT(v.id)                              AS vcount,
+               SUM(v.status='pending')                  AS vpending,
+               SUM(v.appeal_status='pending')           AS vappeal_pending,
+               SUM(v.appeal_status='approved')          AS vappeal_approved
+        FROM students s
+        LEFT JOIN violations v ON v.student_id = s.id
+        WHERE s.student_no = ?
+        GROUP BY s.id
+    ");
     $stmt->bind_param("s", $sno);
     $stmt->execute();
     $foundStudent = $stmt->get_result()->fetch_assoc();
@@ -41,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// All violations
+// All violations (with appeal columns)
 $allViolations = $conn->query("
     SELECT v.*, s.name AS student_name, s.student_no, u.name AS recorded_by_name
     FROM violations v
@@ -92,6 +102,7 @@ arsort($typeData);
 $activeTab = 'record';
 if ($success || $error) $activeTab = 'record';
 if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
+if (isset($_GET['lookup'])) $activeTab = 'lookup';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -110,24 +121,41 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
         }
         .lookup-result.not-found { background:#fef2f2; border-color:#fecaca; }
         .lookup-avatar {
-            width: 44px; height: 44px; border-radius: 50%;
+            width: 52px; height: 52px; border-radius: 50%;
             background: #1a3a5c; color: white; font-size: 1.1rem;
             display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0;
+            flex-shrink: 0; overflow: hidden;
         }
+        .lookup-avatar img { width:100%; height:100%; object-fit:cover; }
         .lookup-info strong { font-size: .95rem; font-weight: 800; display: block; }
         .lookup-info span   { font-size: .78rem; color: var(--muted); }
         .lookup-badges      { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+
+        /* Appeal warning banner */
+        .appeal-warning {
+            background: #fffbeb; border: 1.5px solid #fcd34d;
+            border-radius: 9px; padding: .65rem 1rem;
+            font-size: .82rem; font-weight: 600; color: #92400e;
+            display: flex; align-items: center; gap: 7px;
+            margin-top: .7rem;
+        }
 
         .today-entry {
             display: flex; align-items: center; gap: 10px;
             padding: 9px 0; border-bottom: 1px solid var(--border);
         }
         .today-entry:last-child { border-bottom: none; }
-        .today-dot {
-            width: 8px; height: 8px; border-radius: 50%;
-            background: var(--accent); flex-shrink: 0;
+        .today-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; }
+
+        /* Appeal badge */
+        .appeal-badge {
+            display:inline-block; padding:2px 8px; border-radius:20px;
+            font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
         }
+        .appeal-none     { background:#f1f5f9; color:#64748b; }
+        .appeal-pending  { background:#fef3c7; color:#92400e; }
+        .appeal-approved { background:#d1fae5; color:#065f46; }
+        .appeal-rejected { background:#fee2e2; color:#991b1b; }
 
         .confirm-overlay {
             display: none; position: fixed; inset: 0;
@@ -270,7 +298,7 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
                 <button type="submit" class="btn btn-accent">🚨 Record Violation</button>
             </form>
 
-            <!-- Hidden real form that actually submits -->
+            <!-- Hidden real form -->
             <form id="realForm" method="POST" style="display:none;">
                 <input type="hidden" name="student_no"     id="h_sno">
                 <input type="hidden" name="violation_type" id="h_vtype">
@@ -285,7 +313,7 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
         <div class="card">
             <div class="card-title">🔍 Student Quick Lookup</div>
             <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">
-                Look up a student by their ID number to see their violation history before recording.
+                Look up a student by their ID number to see their violation history and appeal statuses before recording.
             </p>
             <form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
                 <input type="hidden" name="tab" value="lookup">
@@ -301,30 +329,53 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
 
             <?php if (isset($_GET['lookup']) && $_GET['lookup']): ?>
                 <?php if ($foundStudent): ?>
+
+                <!-- Student info row -->
                 <div class="lookup-result">
-                    <div class="lookup-avatar">🎓</div>
+                    <!-- Profile photo or default avatar -->
+                    <div class="lookup-avatar">
+                        <?php if (!empty($foundStudent['profile_photo'])): ?>
+                            <img src="<?= BASE_URL ?>uploads/profile/<?= htmlspecialchars($foundStudent['profile_photo']) ?>" alt="Photo">
+                        <?php else: ?>
+                            🎓
+                        <?php endif; ?>
+                    </div>
+
                     <div class="lookup-info" style="flex:1;">
                         <strong><?= htmlspecialchars($foundStudent['name']) ?></strong>
                         <span><?= htmlspecialchars($foundStudent['student_no']) ?> · <?= htmlspecialchars($foundStudent['course']) ?> Year <?= $foundStudent['year_level'] ?></span>
                         <div class="lookup-badges">
-                            <span class="badge" style="background:#e8f0fe; color:#1d4ed8;"><?= $foundStudent['vcount'] ?> total violation<?= $foundStudent['vcount'] != 1 ? 's' : '' ?></span>
+                            <span class="badge" style="background:#e8f0fe; color:#1d4ed8;">
+                                <?= $foundStudent['vcount'] ?> total violation<?= $foundStudent['vcount'] != 1 ? 's' : '' ?>
+                            </span>
                             <?php if ($foundStudent['vpending'] > 0): ?>
                                 <span class="badge badge-pending"><?= $foundStudent['vpending'] ?> pending</span>
                             <?php else: ?>
                                 <span class="badge badge-resolved">All clear</span>
                             <?php endif; ?>
+                            <?php if ($foundStudent['vappeal_pending'] > 0): ?>
+                                <span class="badge" style="background:#fef3c7; color:#92400e;">
+                                    ⚖️ <?= $foundStudent['vappeal_pending'] ?> appeal<?= $foundStudent['vappeal_pending'] > 1 ? 's' : '' ?> pending
+                                </span>
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <div>
-                        <!-- Pre-fill the record form -->
-                        <button onclick="prefillRecord('<?= htmlspecialchars($foundStudent['student_no']) ?>')"
-                                class="btn btn-accent btn-sm">
-                            🚨 Record Violation
-                        </button>
-                    </div>
+
+                    <button onclick="prefillRecord('<?= htmlspecialchars($foundStudent['student_no']) ?>')"
+                            class="btn btn-accent btn-sm">
+                        🚨 Record Violation
+                    </button>
                 </div>
 
-                <!-- This student's violations -->
+                <!-- Appeal warning — guard heads-up -->
+                <?php if ($foundStudent['vappeal_pending'] > 0): ?>
+                <div class="appeal-warning">
+                    ⚖️ This student has <strong><?= $foundStudent['vappeal_pending'] ?> pending appeal<?= $foundStudent['vappeal_pending'] > 1 ? 's' : '' ?></strong>
+                    under guidance review. Consider this before recording a new violation.
+                </div>
+                <?php endif; ?>
+
+                <!-- Violation history with appeal status -->
                 <?php
                 $sViolations = array_filter($allViolations, fn($v) => $v['student_no'] === $foundStudent['student_no']);
                 ?>
@@ -334,12 +385,21 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Violation</th><th>Date</th><th>Recorded By</th><th>Status</th></tr>
+                                <tr>
+                                    <th>Violation</th>
+                                    <th>Date</th>
+                                    <th>Recorded By</th>
+                                    <th>Status</th>
+                                    <th>Appeal</th>
+                                </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($sViolations as $sv): ?>
+                                <?php foreach ($sViolations as $sv):
+                                    $as = $sv['appeal_status'] ?? 'none';
+                                ?>
                                 <tr>
-                                    <td><strong><?= htmlspecialchars($sv['violation_type']) ?></strong>
+                                    <td>
+                                        <strong><?= htmlspecialchars($sv['violation_type']) ?></strong>
                                         <?php if ($sv['description']): ?>
                                         <div style="font-size:.76rem; color:var(--muted);"><?= htmlspecialchars($sv['description']) ?></div>
                                         <?php endif; ?>
@@ -347,6 +407,16 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
                                     <td><?= date('M d, Y', strtotime($sv['date_recorded'])) ?></td>
                                     <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($sv['recorded_by_name']) ?></td>
                                     <td><span class="badge badge-<?= $sv['status'] ?>"><?= ucfirst($sv['status']) ?></span></td>
+                                    <td>
+                                        <span class="appeal-badge appeal-<?= $as ?>">
+                                            <?= $as === 'none' ? 'No appeal' : ucfirst($as) ?>
+                                        </span>
+                                        <?php if (!empty($sv['appeal_remarks']) && $as !== 'none'): ?>
+                                        <div style="font-size:.72rem; color:var(--muted); margin-top:2px;">
+                                            <?= htmlspecialchars(mb_substr($sv['appeal_remarks'], 0, 50)) ?><?= strlen($sv['appeal_remarks']) > 50 ? '…' : '' ?>
+                                        </div>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -394,7 +464,7 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
                 </div>
                 <?php endforeach; ?>
                 <div style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); font-size:.82rem; color:var(--muted);">
-                    <?= $myToday ?> entry<?= $myToday != 1 ? 'ies' : 'y' ?> recorded today.
+                    <?= $myToday ?> entr<?= $myToday != 1 ? 'ies' : 'y' ?> recorded today.
                 </div>
             <?php endif; ?>
         </div>
@@ -424,10 +494,16 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
             <div class="table-wrap">
                 <table id="violationsTable">
                     <thead>
-                        <tr><th>#</th><th>Student No.</th><th>Student Name</th><th>Violation</th><th>Description</th><th>Date</th><th>Recorded By</th><th>Status</th></tr>
+                        <tr>
+                            <th>#</th><th>Student No.</th><th>Student Name</th>
+                            <th>Violation</th><th>Description</th><th>Date</th>
+                            <th>Recorded By</th><th>Status</th><th>Appeal</th>
+                        </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($allViolations as $i => $v): ?>
+                        <?php foreach ($allViolations as $i => $v):
+                            $as = $v['appeal_status'] ?? 'none';
+                        ?>
                         <tr data-status="<?= $v['status'] ?>">
                             <td><?= $i + 1 ?></td>
                             <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
@@ -437,6 +513,11 @@ if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
                             <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
                             <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($v['recorded_by_name']) ?></td>
                             <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
+                            <td>
+                                <span class="appeal-badge appeal-<?= $as ?>">
+                                    <?= $as === 'none' ? '—' : ucfirst($as) ?>
+                                </span>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -499,18 +580,17 @@ function showConfirm(e) {
     document.getElementById('h_desc').value  = desc;
     document.getElementById('confirmModal').classList.add('active');
 }
-
 function closeConfirm() { document.getElementById('confirmModal').classList.remove('active'); }
 function submitViolation() { document.getElementById('realForm').submit(); }
 document.getElementById('confirmModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeConfirm(); });
 
-// ── Pre-fill record form from lookup ──────────────────────
+// ── Pre-fill record from lookup ───────────────────────────
 function prefillRecord(sno) {
     switchTab('record', document.getElementById('btn-record'));
     document.getElementById('sno_input').value = sno;
 }
 
-// ── Filter ────────────────────────────────────────────────
+// ── Filter all violations table ───────────────────────────
 function filterTable() {
     const q      = document.getElementById('searchInput').value.toLowerCase();
     const status = document.getElementById('filterStatus').value;

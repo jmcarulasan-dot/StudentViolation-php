@@ -8,6 +8,7 @@ $error   = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
+    // ── Add student ───────────────────────────────────────
     if ($action === 'add_student') {
         $student_no = trim($_POST['student_no']);
         $name       = trim($_POST['name']);
@@ -30,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ── Update violation status ───────────────────────────
     if ($action === 'update_status') {
         $vid    = intval($_POST['violation_id']);
         $status = $_POST['status'];
@@ -39,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $success = "Violation status updated!";
     }
 
+    // ── Edit violation ────────────────────────────────────
     if ($action === 'edit_violation') {
         $vid            = intval($_POST['violation_id']);
         $violation_type = trim($_POST['violation_type']);
@@ -51,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute() ? $success = "Violation updated!" : $error = "Failed to update violation.";
     }
 
+    // ── Delete violation ──────────────────────────────────
     if ($action === 'delete_violation') {
         $vid  = intval($_POST['violation_id']);
         $stmt = $conn->prepare("DELETE FROM violations WHERE id = ?");
@@ -59,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $success = "Violation deleted.";
     }
 
+    // ── Delete student ────────────────────────────────────
     if ($action === 'delete_student') {
         $sid  = intval($_POST['student_id']);
         foreach (["DELETE FROM violations WHERE student_id=?","DELETE FROM users WHERE student_id=?","DELETE FROM students WHERE id=?"] as $sql) {
@@ -67,6 +72,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute();
         }
         $success = "Student and all related records deleted.";
+    }
+
+    // ── Review appeal (approve / reject) ─────────────────
+    if ($action === 'review_appeal') {
+        $vid           = intval($_POST['violation_id']);
+        $appealDecision = $_POST['appeal_decision']; // 'approved' or 'rejected'
+        $appealRemarks  = trim($_POST['appeal_remarks'] ?? '');
+
+        if (!in_array($appealDecision, ['approved', 'rejected'])) {
+            $error = "Invalid appeal decision.";
+        } else {
+            // Only update appeal_status and appeal_remarks — violation status unchanged
+            // Guidance will separately decide what to do with the violation itself
+            $stmt = $conn->prepare("UPDATE violations SET appeal_status=?, appeal_remarks=? WHERE id=?");
+            $stmt->bind_param("ssi", $appealDecision, $appealRemarks, $vid);
+            $stmt->execute()
+                ? $success = "Appeal " . ucfirst($appealDecision) . "d. You can now separately resolve or keep the violation as-is."
+                : $error   = "Failed to process appeal.";
+        }
     }
 }
 
@@ -85,6 +109,10 @@ $totalViolations = count($violations);
 $pendingCount    = count(array_filter($violations, fn($v) => $v['status'] === 'pending'));
 $resolvedCount   = $totalViolations - $pendingCount;
 $recentCount     = count(array_filter($violations, fn($v) => strtotime($v['date_recorded']) >= strtotime('-7 days')));
+
+// Appeals summary
+$pendingAppealsCount  = count(array_filter($violations, fn($v) => ($v['appeal_status'] ?? 'none') === 'pending'));
+$approvedAppealsCount = count(array_filter($violations, fn($v) => ($v['appeal_status'] ?? 'none') === 'approved'));
 
 // Monthly trend
 $monthlyData = [];
@@ -138,8 +166,10 @@ if ($_POST) {
     $act = $_POST['action'] ?? '';
     if ($act === 'add_student')    $activeTab = 'add-student';
     elseif ($act === 'delete_student') $activeTab = 'students';
+    elseif ($act === 'review_appeal') $activeTab = 'appeals';
     elseif (in_array($act, ['update_status','edit_violation','delete_violation'])) $activeTab = 'violations';
 }
+if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -164,8 +194,54 @@ if ($_POST) {
         .top-info { flex:1; min-width:0; }
         .top-info strong { display:block; font-size:.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .top-info span   { font-size:.7rem; color:var(--muted); }
-        .bar-mini { height:5px; border-radius:3px; background:var(--accent); margin-top:4px; transition:width .6s ease; }
+        .bar-mini { height:5px; border-radius:3px; background:var(--accent); margin-top:4px; }
         .top-cnt  { font-size:.95rem; font-weight:800; color:var(--accent); min-width:24px; text-align:right; }
+
+        /* Appeal styles */
+        .appeal-badge {
+            display: inline-block; padding: 2px 9px; border-radius: 20px;
+            font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+        }
+        .appeal-none     { background:#f1f5f9; color:#64748b; }
+        .appeal-pending  { background:#fef3c7; color:#92400e; }
+        .appeal-approved { background:#d1fae5; color:#065f46; }
+        .appeal-rejected { background:#fee2e2; color:#991b1b; }
+
+        /* Appeal card in Appeals tab */
+        .appeal-card {
+            border: 1.5px solid var(--border); border-radius: var(--radius);
+            padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+            transition: box-shadow .15s;
+        }
+        .appeal-card:hover { box-shadow: 0 4px 18px rgba(26,58,92,.09); }
+        .appeal-card.urgent { border-color: #fcd34d; background: #fffbeb; }
+
+        .appeal-card-header {
+            display: flex; align-items: flex-start;
+            justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+            margin-bottom: .8rem;
+        }
+        .appeal-student-name { font-size: .95rem; font-weight: 800; color: var(--primary); }
+        .appeal-student-meta { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+        .appeal-text-box {
+            background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+            padding: .7rem .9rem; font-size: .84rem; color: var(--text);
+            line-height: 1.55; margin-bottom: .9rem;
+        }
+        .appeal-text-label { font-size: .72rem; font-weight: 700; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+
+        .review-form { display:none; margin-top:.8rem; }
+        .review-form.open { display:block; }
+
+        /* Remarks display */
+        .remarks-box {
+            background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+            padding: .6rem .9rem; font-size: .82rem; color: #166534; margin-top: .6rem;
+        }
+        .remarks-box.rejected-remarks {
+            background: #fef2f2; border-color: #fecaca; color: #991b1b;
+        }
     </style>
 </head>
 <body>
@@ -211,10 +287,42 @@ if ($_POST) {
     </div>
 </div>
 
+<!-- Appeal Review Modal -->
+<div class="modal-overlay" id="appealModal">
+    <div class="modal-box" style="max-width:520px;">
+        <div class="modal-title">📋 Review Student Appeal</div>
+        <div id="appealModalBody">
+            <!-- filled by JS -->
+        </div>
+        <form method="POST" id="appealReviewForm">
+            <input type="hidden" name="action" value="review_appeal">
+            <input type="hidden" name="violation_id" id="appeal_vid">
+            <input type="hidden" name="appeal_decision" id="appeal_decision_input">
+            <div class="form-group" style="margin-top:.9rem;">
+                <label>Remarks / Notes <span style="color:var(--accent)">*</span></label>
+                <textarea name="appeal_remarks" id="appeal_remarks_input" class="form-control"
+                          rows="3" required
+                          placeholder="Add your reason for approving or rejecting this appeal..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-outline" onclick="closeAppealModal()">Cancel</button>
+                <button type="submit" id="appealRejectBtn" class="btn btn-danger"
+                        onclick="document.getElementById('appeal_decision_input').value='rejected'">
+                    ❌ Reject Appeal
+                </button>
+                <button type="submit" id="appealApproveBtn" class="btn btn-success"
+                        onclick="document.getElementById('appeal_decision_input').value='approved'">
+                    ✅ Approve Appeal
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="page-wrapper">
     <div class="page-header">
         <h2>Guidance Admin Dashboard</h2>
-        <p>Full control over students, violations, and analytics.</p>
+        <p>Full control over students, violations, appeals, and analytics.</p>
     </div>
 
     <?php if ($success): ?><div class="alert alert-success">✅ <?= htmlspecialchars($success) ?></div><?php endif; ?>
@@ -228,6 +336,12 @@ if ($_POST) {
             📂 Violations
             <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 8px;font-size:.68rem;margin-left:5px;"><?= $totalViolations ?></span>
         </button>
+        <button class="tab-btn" id="btn-appeals" onclick="switchTab('appeals',this)">
+            📋 Appeals
+            <?php if ($pendingAppealsCount > 0): ?>
+            <span style="background:#f0a500;color:#fff;border-radius:10px;padding:1px 8px;font-size:.68rem;margin-left:5px;"><?= $pendingAppealsCount ?></span>
+            <?php endif; ?>
+        </button>
         <button class="tab-btn" id="btn-students"    onclick="switchTab('students',this)">
             👥 Students
             <span style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 8px;font-size:.68rem;margin-left:5px;"><?= $totalStudents ?></span>
@@ -238,7 +352,7 @@ if ($_POST) {
     <!-- ══ OVERVIEW ══ -->
     <div id="tab-overview" class="tab-content">
         <!-- Mini stat cards -->
-        <div class="mini-row">
+        <div class="mini-row" style="grid-template-columns:repeat(6,1fr);">
             <div class="mini-card">
                 <div class="mini-icon" style="background:#e8f0fe;">👥</div>
                 <div><div class="mini-num"><?= $totalStudents ?></div><div class="mini-lbl">Students</div></div>
@@ -259,7 +373,25 @@ if ($_POST) {
                 <div class="mini-icon" style="background:#ede9fe;">🆕</div>
                 <div><div class="mini-num"><?= $recentCount ?></div><div class="mini-lbl">Last 7 Days</div></div>
             </div>
+            <!-- Appeals mini card -->
+            <div class="mini-card" style="<?= $pendingAppealsCount > 0 ? 'border-color:#fcd34d; background:#fffbeb;' : '' ?>">
+                <div class="mini-icon" style="background:#fef3c7;">📝</div>
+                <div>
+                    <div class="mini-num" style="color:#f0a500;"><?= $pendingAppealsCount ?></div>
+                    <div class="mini-lbl">Appeals</div>
+                </div>
+            </div>
         </div>
+
+        <!-- Pending appeals quick alert -->
+        <?php if ($pendingAppealsCount > 0): ?>
+        <div class="alert alert-info" style="margin-bottom:1rem; cursor:pointer;"
+             onclick="switchTab('appeals', document.getElementById('btn-appeals'))">
+            📋 <strong><?= $pendingAppealsCount ?> pending appeal<?= $pendingAppealsCount > 1 ? 's' : '' ?></strong>
+            awaiting your review.
+            <span style="font-weight:700; text-decoration:underline; margin-left:8px;">Review now →</span>
+        </div>
+        <?php endif; ?>
 
         <!-- Line + Doughnut -->
         <div class="g2">
@@ -339,7 +471,6 @@ if ($_POST) {
             <div class="cwrap tall"><canvas id="stackedChart"></canvas></div>
         </div>
 
-        <!-- Type breakdown table -->
         <div class="card">
             <div class="card-title">📋 Violation Type Summary</div>
             <?php if (empty($typeData)): ?>
@@ -383,9 +514,16 @@ if ($_POST) {
                         <option value="pending">Pending</option>
                         <option value="resolved">Resolved</option>
                     </select>
+                    <select id="filterAppeal" onchange="filterViolations()" class="form-control" style="max-width:150px; margin:0; padding:8px 12px;">
+                        <option value="">All Appeals</option>
+                        <option value="pending">Appeal Pending</option>
+                        <option value="approved">Appeal Approved</option>
+                        <option value="rejected">Appeal Rejected</option>
+                        <option value="none">No Appeal</option>
+                    </select>
                     <input type="text" id="searchViolations" class="form-control"
                            placeholder="🔍 Search..." oninput="filterViolations()"
-                           style="max-width:210px; margin:0;">
+                           style="max-width:200px; margin:0;">
                 </div>
             </div>
             <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
@@ -396,18 +534,53 @@ if ($_POST) {
             <div class="table-wrap">
                 <table id="violationsTable">
                     <thead>
-                        <tr><th>#</th><th>Student No.</th><th>Student</th><th>Violation</th><th>Date</th><th>By</th><th>Status</th><th>Actions</th></tr>
+                        <tr>
+                            <th>#</th><th>Student No.</th><th>Student</th>
+                            <th>Violation</th><th>Date</th><th>By</th>
+                            <th>Status</th><th>Appeal</th><th>Actions</th>
+                        </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($violations as $i => $v): ?>
-                        <tr data-status="<?= $v['status'] ?>">
+                        <?php foreach ($violations as $i => $v):
+                            $appealStatus = $v['appeal_status'] ?? 'none';
+                        ?>
+                        <tr data-status="<?= $v['status'] ?>" data-appeal="<?= $appealStatus ?>">
                             <td><?= $i+1 ?></td>
                             <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
                             <td><?= htmlspecialchars($v['student_name']) ?></td>
-                            <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
+                            <td>
+                                <strong><?= htmlspecialchars($v['violation_type']) ?></strong>
+                                <?php if ($v['description']): ?>
+                                <div style="font-size:.75rem; color:var(--muted);"><?= htmlspecialchars($v['description']) ?></div>
+                                <?php endif; ?>
+                            </td>
                             <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
                             <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($v['recorded_by_name']) ?></td>
                             <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
+                            <td>
+                                <?php if ($appealStatus === 'pending'): ?>
+                                    <button class="btn btn-sm btn-outline" style="border-color:#f0a500; color:#92400e; font-size:.73rem;"
+                                            onclick="openAppealModal(
+                                                <?= $v['id'] ?>,
+                                                '<?= addslashes($v['student_name']) ?>',
+                                                '<?= addslashes($v['student_no']) ?>',
+                                                '<?= addslashes($v['violation_type']) ?>',
+                                                '<?= addslashes($v['appeal_text'] ?? '') ?>'
+                                            )">
+                                        📝 Review
+                                    </button>
+                                <?php else: ?>
+                                    <span class="appeal-badge appeal-<?= $appealStatus ?>">
+                                        <?= $appealStatus === 'none' ? '—' : ucfirst($appealStatus) ?>
+                                    </span>
+                                    <?php if (!empty($v['appeal_remarks'])): ?>
+                                    <div style="font-size:.72rem; color:var(--muted); margin-top:3px; max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                                         title="<?= htmlspecialchars($v['appeal_remarks']) ?>">
+                                        <?= htmlspecialchars($v['appeal_remarks']) ?>
+                                    </div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </td>
                             <td style="display:flex; gap:4px; flex-wrap:wrap;">
                                 <button class="btn btn-sm btn-outline"
                                         onclick="openEdit(<?= $v['id'] ?>,'<?= addslashes($v['violation_type']) ?>','<?= addslashes($v['description'] ?? '') ?>','<?= $v['date_recorded'] ?>','<?= $v['status'] ?>')">
@@ -435,6 +608,141 @@ if ($_POST) {
             <p id="noVResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
             <?php endif; ?>
         </div>
+    </div>
+
+    <!-- ══ APPEALS ══ -->
+    <div id="tab-appeals" class="tab-content">
+        <div class="page-header" style="margin-bottom:1rem;">
+            <h2 style="font-size:1.2rem;">Student Appeals</h2>
+            <p style="font-size:.85rem;">Review and respond to student appeals for their violations.</p>
+        </div>
+
+        <?php
+        $pendingAppeals  = array_filter($violations, fn($v) => ($v['appeal_status'] ?? 'none') === 'pending');
+        $reviewedAppeals = array_filter($violations, fn($v) => in_array($v['appeal_status'] ?? 'none', ['approved','rejected']));
+        ?>
+
+        <!-- Pending Appeals -->
+        <div class="card" style="margin-bottom:1.2rem;">
+            <div class="card-title">
+                ⏳ Pending Appeals
+                <?php if (count($pendingAppeals) > 0): ?>
+                <span style="background:#f0a500; color:#fff; border-radius:10px; padding:2px 9px; font-size:.7rem; margin-left:6px; font-weight:800;"><?= count($pendingAppeals) ?></span>
+                <?php endif; ?>
+            </div>
+
+            <?php if (empty($pendingAppeals)): ?>
+                <div class="empty-state">
+                    <div class="empty-icon">✅</div>
+                    <p>No pending appeals — all caught up!</p>
+                </div>
+            <?php else: ?>
+                <?php foreach ($pendingAppeals as $v): ?>
+                <div class="appeal-card urgent">
+                    <div class="appeal-card-header">
+                        <div>
+                            <div class="appeal-student-name">
+                                <?= htmlspecialchars($v['student_name']) ?>
+                                <span style="font-weight:400; font-size:.82rem; color:var(--muted);">
+                                    · <?= htmlspecialchars($v['student_no']) ?>
+                                </span>
+                            </div>
+                            <div class="appeal-student-meta">
+                                Violation: <strong><?= htmlspecialchars($v['violation_type']) ?></strong>
+                                <?php if ($v['description']): ?> — <?= htmlspecialchars($v['description']) ?><?php endif; ?>
+                                · <?= date('M d, Y', strtotime($v['date_recorded'])) ?>
+                                · Recorded by <?= htmlspecialchars($v['recorded_by_name']) ?>
+                            </div>
+                            <div style="margin-top:5px;">
+                                <span class="badge badge-pending">Pending</span>
+                                <span class="appeal-badge appeal-pending" style="margin-left:5px;">Appeal Pending</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-sm btn-outline no-print"
+                                style="border-color:#f0a500; color:#92400e; white-space:nowrap;"
+                                onclick="openAppealModal(
+                                    <?= $v['id'] ?>,
+                                    '<?= addslashes($v['student_name']) ?>',
+                                    '<?= addslashes($v['student_no']) ?>',
+                                    '<?= addslashes($v['violation_type']) ?>',
+                                    '<?= addslashes($v['appeal_text'] ?? '') ?>'
+                                )">
+                            📋 Review Appeal
+                        </button>
+                    </div>
+
+                    <div class="appeal-text-label">Student's Appeal Reason:</div>
+                    <div class="appeal-text-box">
+                        "<?= nl2br(htmlspecialchars($v['appeal_text'] ?? '—')) ?>"
+                    </div>
+
+                    <!-- Inline quick-review form -->
+                    <form method="POST">
+                        <input type="hidden" name="action" value="review_appeal">
+                        <input type="hidden" name="violation_id" value="<?= $v['id'] ?>">
+                        <input type="hidden" name="appeal_decision" id="inline_decision_<?= $v['id'] ?>" value="">
+                        <div class="form-group" style="margin-bottom:.7rem;">
+                            <label style="font-size:.8rem;">Remarks / Notes <span style="color:var(--accent)">*</span></label>
+                            <textarea name="appeal_remarks" class="form-control" rows="2" required
+                                      placeholder="Explain your decision to the student..."></textarea>
+                        </div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button type="submit" class="btn btn-success btn-sm"
+                                    onclick="document.getElementById('inline_decision_<?= $v['id'] ?>').value='approved'">
+                                ✅ Approve Appeal
+                            </button>
+                            <button type="submit" class="btn btn-danger btn-sm"
+                                    onclick="document.getElementById('inline_decision_<?= $v['id'] ?>').value='rejected'">
+                                ❌ Reject Appeal
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+
+        <!-- Reviewed Appeals -->
+        <?php if (!empty($reviewedAppeals)): ?>
+        <div class="card">
+            <div class="card-title">📁 Reviewed Appeals</div>
+            <?php foreach ($reviewedAppeals as $v):
+                $as = $v['appeal_status'];
+            ?>
+            <div class="appeal-card">
+                <div class="appeal-card-header">
+                    <div>
+                        <div class="appeal-student-name">
+                            <?= htmlspecialchars($v['student_name']) ?>
+                            <span style="font-weight:400; font-size:.82rem; color:var(--muted);">
+                                · <?= htmlspecialchars($v['student_no']) ?>
+                            </span>
+                        </div>
+                        <div class="appeal-student-meta">
+                            Violation: <strong><?= htmlspecialchars($v['violation_type']) ?></strong>
+                            · <?= date('M d, Y', strtotime($v['date_recorded'])) ?>
+                        </div>
+                        <div style="margin-top:5px; display:flex; gap:5px; flex-wrap:wrap;">
+                            <span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span>
+                            <span class="appeal-badge appeal-<?= $as ?>"><?= ucfirst($as) ?></span>
+                        </div>
+                    </div>
+                </div>
+                <?php if (!empty($v['appeal_text'])): ?>
+                <div class="appeal-text-label">Student's Reason:</div>
+                <div class="appeal-text-box" style="margin-bottom:.6rem;">
+                    "<?= nl2br(htmlspecialchars($v['appeal_text'])) ?>"
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($v['appeal_remarks'])): ?>
+                <div class="<?= $as === 'approved' ? 'remarks-box' : 'remarks-box rejected-remarks' ?>">
+                    <strong>Your remarks:</strong> <?= nl2br(htmlspecialchars($v['appeal_remarks'])) ?>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
     </div>
 
     <!-- ══ STUDENTS ══ -->
@@ -465,7 +773,13 @@ if ($_POST) {
                         <tr>
                             <td><?= $i+1 ?></td>
                             <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($s['student_no']) ?></code></td>
-                            <td><?= htmlspecialchars($s['name']) ?></td>
+                            <td>
+                                <?php if (!empty($s['profile_photo'])): ?>
+                                <img src="<?= BASE_URL ?>uploads/profile/<?= htmlspecialchars($s['profile_photo']) ?>"
+                                     style="width:26px; height:26px; border-radius:50%; object-fit:cover; margin-right:6px; vertical-align:middle; border:1.5px solid var(--border);">
+                                <?php endif; ?>
+                                <?= htmlspecialchars($s['name']) ?>
+                            </td>
                             <td><?= htmlspecialchars($s['course']) ?></td>
                             <td>Yr <?= $s['year_level'] ?></td>
                             <td>
@@ -541,10 +855,10 @@ if ($_POST) {
         </div>
     </div>
 
-</div>
+</div><!-- end page-wrapper -->
 
 <script>
-// ── Chart data ─────────────────────────────────────────────
+// ── Chart data ──────────────────────────────────────────────
 const monthlyLabels   = <?= json_encode(array_keys($monthlyData)) ?>;
 const monthlyCounts   = <?= json_encode(array_values($monthlyData)) ?>;
 const typeLabels      = <?= json_encode(array_keys($typeData)) ?>;
@@ -561,35 +875,30 @@ Chart.defaults.color       = '#64748b';
 const C = { primary:'#1a3a5c', accent:'#e84545', gold:'#f0a500', green:'#2ecc71', purple:'#8b5cf6', teal:'#14b8a6', orange:'#f97316', blue:'#3b82f6' };
 const PAL = Object.values(C);
 
-// 1. Line
 new Chart(document.getElementById('lineChart'), {
     type:'line',
     data:{ labels:monthlyLabels, datasets:[{ label:'Violations', data:monthlyCounts, borderColor:C.primary, backgroundColor:'rgba(26,58,92,0.08)', borderWidth:2.5, pointBackgroundColor:C.primary, pointRadius:5, pointHoverRadius:7, fill:true, tension:0.4 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false} }, scales:{ y:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'rgba(0,0,0,0.05)'}}, x:{grid:{display:false}} } }
 });
 
-// 2. Doughnut
 new Chart(document.getElementById('doughnutChart'), {
     type:'doughnut',
     data:{ labels:['Pending','Resolved'], datasets:[{ data:[<?= $pendingCount ?>,<?= $resolvedCount ?>], backgroundColor:[C.accent,C.green], borderWidth:2, borderColor:'#fff', hoverOffset:6 }] },
     options:{ responsive:true, maintainAspectRatio:false, cutout:'65%', plugins:{ legend:{ position:'bottom', labels:{padding:16,usePointStyle:true,pointStyleWidth:10} } } }
 });
 
-// 3. Bar by type
 new Chart(document.getElementById('barChart'), {
     type:'bar',
     data:{ labels:typeLabels, datasets:[{ data:typeCounts, backgroundColor:PAL.slice(0,typeLabels.length), borderRadius:5, borderSkipped:false }] },
     options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{legend:{display:false}}, scales:{ x:{beginAtZero:true,ticks:{stepSize:1},grid:{color:'rgba(0,0,0,0.05)'}}, y:{grid:{display:false}} } }
 });
 
-// 4. Pie by course
 new Chart(document.getElementById('courseChart'), {
     type:'pie',
     data:{ labels:courseLabels, datasets:[{ data:courseCounts, backgroundColor:[C.primary,C.purple,C.gold,C.teal,C.orange], borderWidth:2, borderColor:'#fff', hoverOffset:6 }] },
     options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{padding:12,usePointStyle:true,pointStyleWidth:10,font:{size:11}} } } }
 });
 
-// 5. Stacked
 new Chart(document.getElementById('stackedChart'), {
     type:'bar',
     data:{ labels:monthlyLabels, datasets:[
@@ -609,7 +918,7 @@ function switchTab(name, btn) {
 }
 switchTab('<?= $activeTab ?>', null);
 
-// ── Modal ─────────────────────────────────────────────────
+// ── Edit Violation Modal ──────────────────────────────────
 function openEdit(id, type, desc, date, status) {
     document.getElementById('edit_vid').value    = id;
     document.getElementById('edit_type').value   = type;
@@ -621,7 +930,30 @@ function openEdit(id, type, desc, date, status) {
 function closeModal() { document.getElementById('editModal').classList.remove('active'); }
 document.getElementById('editModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal(); });
 
-// ── Search/Filter ─────────────────────────────────────────
+// ── Appeal Review Modal ───────────────────────────────────
+function openAppealModal(id, studentName, studentNo, violationType, appealText) {
+    document.getElementById('appeal_vid').value = id;
+    document.getElementById('appeal_remarks_input').value = '';
+
+    document.getElementById('appealModalBody').innerHTML = `
+        <div style="background:#f8fafc; border:1px solid var(--border); border-radius:9px; padding:.9rem 1rem; margin-bottom:.5rem;">
+            <div style="font-size:.78rem; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; font-weight:700;">Student</div>
+            <div style="font-weight:800; font-size:.95rem; color:var(--primary);">${studentName}</div>
+            <div style="font-size:.78rem; color:var(--muted);">${studentNo} · ${violationType}</div>
+        </div>
+        <div style="margin-bottom:.3rem;">
+            <div style="font-size:.72rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:5px;">Student's Appeal Reason:</div>
+            <div style="background:#fffbeb; border:1.5px solid #fcd34d; border-radius:8px; padding:.75rem 1rem; font-size:.86rem; font-style:italic; color:#78350f; line-height:1.55;">
+                "${appealText || '—'}"
+            </div>
+        </div>
+    `;
+    document.getElementById('appealModal').classList.add('active');
+}
+function closeAppealModal() { document.getElementById('appealModal').classList.remove('active'); }
+document.getElementById('appealModal').addEventListener('click', e => { if(e.target===e.currentTarget) closeAppealModal(); });
+
+// ── Search / Filter ───────────────────────────────────────
 function searchTable(tId, iId, nId) {
     const q = document.getElementById(iId).value.toLowerCase();
     let vis = 0;
@@ -636,9 +968,13 @@ function searchTable(tId, iId, nId) {
 function filterViolations() {
     const q      = document.getElementById('searchViolations').value.toLowerCase();
     const status = document.getElementById('filterStatus').value;
+    const appeal = document.getElementById('filterAppeal').value;
     let vis = 0;
     document.querySelectorAll('#violationsTable tbody tr').forEach(r => {
-        const show = r.innerText.toLowerCase().includes(q) && (!status || r.dataset.status===status);
+        const matchText   = r.innerText.toLowerCase().includes(q);
+        const matchStatus = !status || r.dataset.status === status;
+        const matchAppeal = !appeal || r.dataset.appeal === appeal;
+        const show = matchText && matchStatus && matchAppeal;
         r.style.display = show ? '' : 'none';
         if (show) vis++;
     });

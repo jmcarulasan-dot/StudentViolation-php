@@ -530,6 +530,24 @@ $photoUrl  = $photoFile ? BASE_URL . 'uploads/profile/' . htmlspecialchars($phot
                     </div>
                     <?php endif; ?>
 
+                    <!-- Show guidance remarks if appeal was reviewed -->
+                    <?php
+                    $appealRemarks = $v['appeal_remarks'] ?? '';
+                    if ($appealRemarks && in_array($appealStatus, ['approved','rejected'])):
+                        $isApproved = $appealStatus === 'approved';
+                    ?>
+                    <div style="
+                        margin-top:.6rem; border-radius:8px; padding:.7rem .9rem;
+                        font-size:.82rem; line-height:1.5;
+                        <?= $isApproved
+                            ? 'background:#d1fae5; color:#065f46; border:1px solid #6ee7b7;'
+                            : 'background:#fee2e2; color:#991b1b; border:1px solid #fca5a5;' ?>
+                    ">
+                        <strong><?= $isApproved ? '✅ Guidance remarks (Approved):' : '❌ Guidance remarks (Rejected):' ?></strong><br>
+                        <?= nl2br(htmlspecialchars($appealRemarks)) ?>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- Inline appeal form -->
                     <?php if ($canAppeal): ?>
                     <div class="appeal-form-inline" id="appeal-form-<?= $v['id'] ?>" style="display:none;">

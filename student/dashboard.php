@@ -29,23 +29,19 @@ while ($row = $result->fetch_assoc()) {
     if ($row['status'] === 'resolved') $resolved++;
 }
 
-// Latest violation (for alert banner)
 $latest = $rows[0] ?? null;
 
-// Most recent violation this month
 $thisMonth = 0;
 foreach ($rows as $r) {
     if (date('Y-m', strtotime($r['date_recorded'])) === date('Y-m')) $thisMonth++;
 }
 
-// Standing score: starts at 100, -10 per pending, -5 per resolved
 $score = max(0, 100 - ($pending * 10) - ($resolved * 5));
 if ($score >= 90)     { $standingLabel = 'Excellent'; $standingColor = '#2ecc71'; $standingBg = '#d1fae5'; }
 elseif ($score >= 70) { $standingLabel = 'Good';      $standingColor = '#3b82f6'; $standingBg = '#dbeafe'; }
 elseif ($score >= 50) { $standingLabel = 'Fair';      $standingColor = '#f0a500'; $standingBg = '#fef3c7'; }
 else                   { $standingLabel = 'At Risk';   $standingColor = '#e84545'; $standingBg = '#fee2e2'; }
 
-// Monthly data (last 6 months)
 $monthlyData = [];
 for ($i = 5; $i >= 0; $i--) {
     $label = date('M Y', strtotime("-$i months"));
@@ -56,13 +52,19 @@ foreach ($rows as $r) {
     if (isset($monthlyData[$label])) $monthlyData[$label]++;
 }
 
-// Type breakdown
 $typeData = [];
 foreach ($rows as $r) {
     $t = $r['violation_type'];
     $typeData[$t] = ($typeData[$t] ?? 0) + 1;
 }
 arsort($typeData);
+
+// Profile photo
+$photoFile = $student['profile_photo'] ?? '';
+$photoUrl  = $photoFile ? BASE_URL . 'uploads/profile/' . htmlspecialchars($photoFile) : '';
+
+// Pending appeals count
+$pendingAppeals = count(array_filter($rows, fn($r) => ($r['appeal_status'] ?? 'none') === 'pending'));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -76,23 +78,19 @@ arsort($typeData);
         @media print {
             .navbar, .no-print { display: none !important; }
             .page-wrapper { margin: 0; padding: 1rem; }
-            .student-card { background: #1a3a5c !important; -webkit-print-color-adjust: exact; }
             body { background: white; }
         }
 
         .standing-card {
-            border-radius: var(--radius);
-            padding: 1.2rem 1.4rem;
-            margin-bottom: 1.4rem;
-            display: flex; align-items: center; gap: 1rem;
-            border: 2px solid;
+            border-radius: var(--radius); padding: 1.2rem 1.4rem;
+            margin-bottom: 1.4rem; display: flex; align-items: center;
+            gap: 1rem; border: 2px solid; flex-wrap: wrap;
         }
         .standing-ring {
             width: 64px; height: 64px; border-radius: 50%;
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
-            font-weight: 800; flex-shrink: 0;
-            border: 3px solid;
+            font-weight: 800; flex-shrink: 0; border: 3px solid;
         }
         .standing-score { font-size: 1.3rem; line-height: 1; }
         .standing-pts   { font-size: .6rem; text-transform: uppercase; letter-spacing: .5px; }
@@ -102,18 +100,38 @@ arsort($typeData);
         .alert-banner {
             border-radius: var(--radius); padding: 1rem 1.2rem;
             margin-bottom: 1.4rem; display: flex; align-items: center;
-            gap: .9rem; border: 1.5px solid #fecaca;
-            background: #fef2f2;
+            gap: .9rem; border: 1.5px solid #fecaca; background: #fef2f2;
         }
         .alert-banner-icon { font-size: 1.5rem; flex-shrink: 0; }
         .alert-banner-text strong { font-size: .9rem; color: #991b1b; display: block; margin-bottom: 2px; }
         .alert-banner-text span   { font-size: .8rem; color: #c53030; }
 
-        .month-badge {
-            display: inline-block; padding: 2px 9px;
-            border-radius: 20px; font-size: .7rem; font-weight: 700;
-            background: #fee2e2; color: #991b1b;
+        /* Profile header */
+        .student-profile-header {
+            display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap;
         }
+        .student-avatar-photo {
+            width: 52px; height: 52px; border-radius: 50%;
+            object-fit: cover; border: 2.5px solid rgba(255,255,255,.4);
+            flex-shrink: 0;
+        }
+        .student-avatar-placeholder {
+            width: 52px; height: 52px; border-radius: 50%;
+            background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.2);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; flex-shrink: 0;
+        }
+
+        /* Appeal badge on table */
+        .appeal-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 20px;
+            font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
+            margin-left: 5px;
+        }
+        .appeal-none     { background:#f1f5f9; color:#64748b; }
+        .appeal-pending  { background:#fef3c7; color:#92400e; }
+        .appeal-approved { background:#d1fae5; color:#065f46; }
+        .appeal-rejected { background:#fee2e2; color:#991b1b; }
     </style>
 </head>
 <body>
@@ -127,12 +145,13 @@ arsort($typeData);
             <h2>My Dashboard</h2>
             <p>Welcome back, <strong><?= htmlspecialchars($_SESSION['name']) ?></strong>! Here's your complete violation summary.</p>
         </div>
-        <button onclick="window.print()" class="btn btn-outline no-print" style="gap:6px;">
-            🖨️ Print Report
-        </button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a href="<?= BASE_URL ?>student/profile.php" class="btn btn-outline no-print">👤 My Profile</a>
+            <button onclick="window.print()" class="btn btn-outline no-print">🖨️ Print Report</button>
+        </div>
     </div>
 
-    <!-- Latest violation alert -->
+    <!-- Pending violation alert -->
     <?php if ($latest && $latest['status'] === 'pending'): ?>
     <div class="alert-banner no-print">
         <div class="alert-banner-icon">🚨</div>
@@ -142,16 +161,29 @@ arsort($typeData);
                 Latest: <strong><?= htmlspecialchars($latest['violation_type']) ?></strong>
                 recorded on <?= date('F d, Y', strtotime($latest['date_recorded'])) ?>
                 by <?= htmlspecialchars($latest['recorded_by_name']) ?>.
-                Please coordinate with the guidance office.
+                Please coordinate with the guidance office or
+                <a href="<?= BASE_URL ?>student/profile.php#appeals" style="color:#c53030; font-weight:700;">file an appeal</a>.
             </span>
         </div>
     </div>
     <?php endif; ?>
 
-    <!-- Student Info Card -->
+    <!-- Pending appeals alert -->
+    <?php if ($pendingAppeals > 0): ?>
+    <div class="alert alert-info no-print" style="margin-bottom:1.4rem;">
+        ⏳ You have <strong><?= $pendingAppeals ?></strong> appeal<?= $pendingAppeals > 1 ? 's' : '' ?> awaiting review by the guidance office.
+    </div>
+    <?php endif; ?>
+
+    <!-- Student Info Card (with profile photo) -->
     <div class="student-card">
         <div class="student-card-header">
-            <div class="student-avatar">🎓</div>
+            <!-- Photo or placeholder -->
+            <?php if ($photoUrl): ?>
+                <img src="<?= $photoUrl ?>?v=<?= time() ?>" alt="Profile" class="student-avatar-photo">
+            <?php else: ?>
+                <div class="student-avatar-placeholder">🎓</div>
+            <?php endif; ?>
             <div>
                 <div class="student-card-name"><?= htmlspecialchars($student['name']) ?></div>
                 <div class="student-card-no"><?= htmlspecialchars($student['student_no']) ?></div>
@@ -159,6 +191,10 @@ arsort($typeData);
             <span class="student-card-badge">
                 <?= htmlspecialchars($student['course']) ?> — Year <?= $student['year_level'] ?>
             </span>
+            <a href="<?= BASE_URL ?>student/profile.php" class="btn btn-sm no-print"
+               style="background:rgba(255,255,255,.12); color:white; border:1px solid rgba(255,255,255,.2); margin-left:auto;">
+                ✏️ Edit Profile
+            </a>
         </div>
         <div class="student-info-grid">
             <div class="student-info-item">
@@ -191,13 +227,13 @@ arsort($typeData);
             <h3>Standing: <?= $standingLabel ?></h3>
             <p>
                 <?php if ($score >= 90): ?>
-                    Great job! You have no or very few violations. Keep maintaining good discipline.
+                    Great job! You have no or very few violations. Keep it up.
                 <?php elseif ($score >= 70): ?>
-                    You're in good standing. Resolve your pending violations to improve your score.
+                    You're in good standing. Resolve pending violations to improve your score.
                 <?php elseif ($score >= 50): ?>
-                    Your standing needs attention. Please visit the guidance office to resolve violations.
+                    Your standing needs attention. Visit the guidance office to resolve violations.
                 <?php else: ?>
-                    ⚠️ Your standing is at risk. Immediate action is required — please see the guidance office.
+                    ⚠️ Your standing is at risk. Immediate action required — see the guidance office.
                 <?php endif; ?>
             </p>
         </div>
@@ -213,24 +249,15 @@ arsort($typeData);
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-icon" style="background:#e8f0fe;">📋</div>
-            <div class="stat-info">
-                <div class="stat-num"><?= $total ?></div>
-                <div class="stat-label">Total Violations</div>
-            </div>
+            <div class="stat-info"><div class="stat-num"><?= $total ?></div><div class="stat-label">Total Violations</div></div>
         </div>
         <div class="stat-card accent">
             <div class="stat-icon" style="background:#fee2e2;">⚠️</div>
-            <div class="stat-info">
-                <div class="stat-num"><?= $pending ?></div>
-                <div class="stat-label">Pending</div>
-            </div>
+            <div class="stat-info"><div class="stat-num"><?= $pending ?></div><div class="stat-label">Pending</div></div>
         </div>
         <div class="stat-card green">
             <div class="stat-icon" style="background:#d1fae5;">✅</div>
-            <div class="stat-info">
-                <div class="stat-num"><?= $resolved ?></div>
-                <div class="stat-label">Resolved</div>
-            </div>
+            <div class="stat-info"><div class="stat-num"><?= $resolved ?></div><div class="stat-label">Resolved</div></div>
         </div>
         <div class="stat-card" style="">
             <div class="stat-icon" style="background:#ede9fe;">📅</div>
@@ -241,7 +268,7 @@ arsort($typeData);
         </div>
     </div>
 
-    <!-- Charts (hidden on print — full table is shown instead) -->
+    <!-- Charts -->
     <?php if ($total > 0): ?>
     <div class="g2e no-print" style="margin-bottom:1.4rem;">
         <div class="chart-card">
@@ -270,6 +297,9 @@ arsort($typeData);
                 <input type="text" id="searchInput" class="form-control"
                        placeholder="🔍 Search..." oninput="filterTable()"
                        style="max-width:200px; margin:0;">
+                <a href="<?= BASE_URL ?>student/profile.php" class="btn btn-outline btn-sm no-print">
+                    📋 Manage Appeals
+                </a>
             </div>
             <?php endif; ?>
         </div>
@@ -291,10 +321,15 @@ arsort($typeData);
                         <th>Date</th>
                         <th>Recorded By</th>
                         <th>Status</th>
+                        <th class="no-print">Appeal</th>
+                        <th class="no-print">Guidance Remarks</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($rows as $i => $v): ?>
+                    <?php foreach ($rows as $i => $v):
+                        $appealStatus  = $v['appeal_status']  ?? 'none';
+                        $appealRemarks = $v['appeal_remarks']  ?? '';
+                    ?>
                     <tr data-status="<?= $v['status'] ?>">
                         <td><?= $i + 1 ?></td>
                         <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
@@ -302,6 +337,33 @@ arsort($typeData);
                         <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
                         <td><?= htmlspecialchars($v['recorded_by_name']) ?></td>
                         <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
+                        <td class="no-print">
+                            <?php if ($v['status'] === 'pending' && $appealStatus === 'none'): ?>
+                                <a href="<?= BASE_URL ?>student/profile.php"
+                                   class="btn btn-sm btn-outline" style="font-size:.73rem;">
+                                    📝 Appeal
+                                </a>
+                            <?php else: ?>
+                                <span class="appeal-badge appeal-<?= htmlspecialchars($appealStatus) ?>">
+                                    <?= $appealStatus === 'none' ? '—' : ucfirst($appealStatus) ?>
+                                </span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="no-print">
+                            <?php if ($appealRemarks && $appealStatus !== 'none'): ?>
+                                <div style="
+                                    font-size:.78rem; line-height:1.45; max-width:200px;
+                                    padding:5px 8px; border-radius:7px;
+                                    <?= $appealStatus === 'approved'
+                                        ? 'background:#d1fae5; color:#065f46; border:1px solid #6ee7b7;'
+                                        : 'background:#fee2e2; color:#991b1b; border:1px solid #fca5a5;' ?>
+                                ">
+                                    <?= htmlspecialchars($appealRemarks) ?>
+                                </div>
+                            <?php else: ?>
+                                <span style="color:var(--muted); font-size:.8rem;">—</span>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -313,7 +375,7 @@ arsort($typeData);
         <?php endif; ?>
     </div>
 
-    <!-- Print footer (only visible when printing) -->
+    <!-- Print footer -->
     <div style="display:none;" class="print-only">
         <p style="font-size:.8rem; color:#666; margin-top:2rem; text-align:center;">
             Printed from ACLC SVS — Student Violation System · <?= date('F d, Y h:i A') ?>
