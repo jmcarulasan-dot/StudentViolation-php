@@ -22,19 +22,34 @@ $roleColors = [
 $roleColor = $roleColors[$role] ?? '#1a3a5c';
 $roleIcons = ['student' => '🎓', 'guard' => '🛡️', 'guidance' => '👩‍💼'];
 $roleIcon  = $roleIcons[$role] ?? '👤';
+
+// Profile photo for student nav avatar
+$navPhotoUrl = '';
+if ($role === 'student' && isset($_SESSION['student_id'])) {
+    // Use a lightweight query only if we don't have it cached
+    if (!isset($_SESSION['_nav_photo'])) {
+        global $conn;
+        $sid  = intval($_SESSION['student_id']);
+        $stmt = $conn->prepare("SELECT profile_photo FROM students WHERE id = ?");
+        $stmt->bind_param("i", $sid);
+        $stmt->execute();
+        $photoRow = $stmt->get_result()->fetch_assoc();
+        $_SESSION['_nav_photo'] = $photoRow['profile_photo'] ?? '';
+    }
+    if (!empty($_SESSION['_nav_photo'])) {
+        $navPhotoUrl = BASE_URL . 'uploads/profile/' . htmlspecialchars($_SESSION['_nav_photo']);
+    }
+}
 ?>
 
 <nav class="navbar">
     <a href="<?= $dashboardLink ?>" class="brand">
-        <!-- ACLC logo on a crisp white rounded background -->
         <div style="
             width:42px; height:42px; min-width:42px;
-            background:#ffffff;
-            border-radius:10px;
+            background:#ffffff; border-radius:10px;
             display:flex; align-items:center; justify-content:center;
             box-shadow:0 2px 8px rgba(0,0,0,0.18), 0 0 0 1px rgba(255,255,255,0.25);
-            overflow:hidden;
-            flex-shrink:0;
+            overflow:hidden; flex-shrink:0;
         ">
             <img src="<?= BASE_URL ?>assets/image/ACLC.png" alt="ACLC"
                  style="width:34px; height:34px; object-fit:contain; display:block;">
@@ -53,10 +68,21 @@ $roleIcon  = $roleIcons[$role] ?? '👤';
         ">
             <?= $roleIcon ?> <?= $roleLabel ?>
         </div>
-        <span class="nav-name"><?= htmlspecialchars($name) ?></span>
+
+        <!-- Student: show photo avatar if available, otherwise name -->
         <?php if ($role === 'student'): ?>
+            <?php if ($navPhotoUrl): ?>
+                <img src="<?= $navPhotoUrl ?>" alt="Profile"
+                     style="width:32px; height:32px; border-radius:50%; object-fit:cover;
+                            border:2px solid rgba(255,255,255,.3);">
+            <?php else: ?>
+                <span class="nav-name"><?= htmlspecialchars($name) ?></span>
+            <?php endif; ?>
             <a href="<?= BASE_URL ?>student/profile.php" class="nav-link">Profile</a>
+        <?php else: ?>
+            <span class="nav-name"><?= htmlspecialchars($name) ?></span>
         <?php endif; ?>
+
         <a href="#" class="nav-logout"
            onclick="document.getElementById('logoutModal').style.display='flex'; return false;">
            Logout
@@ -89,7 +115,7 @@ $roleIcon  = $roleIcons[$role] ?? '👤';
             <button onclick="document.getElementById('logoutModal').style.display='none'"
                     style="padding:.6rem 1.5rem; border-radius:9px; border:1.5px solid #e2e8f0;
                            background:#fff; cursor:pointer; font-size:.88rem; font-weight:600;
-                           color:#4a5568; font-family:inherit; transition:background .15s;">
+                           color:#4a5568; font-family:inherit;">
                 Cancel
             </button>
             <a href="<?= BASE_URL ?>logout.php"
