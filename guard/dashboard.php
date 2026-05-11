@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// All violations (with appeal columns)
+// All violations
 $allViolations = $conn->query("
     SELECT v.*, s.name AS student_name, s.student_no, u.name AS recorded_by_name
     FROM violations v
@@ -64,14 +64,12 @@ $total    = count($allViolations);
 $pending  = count(array_filter($allViolations, fn($r) => $r['status'] === 'pending'));
 $resolved = $total - $pending;
 
-// My recordings today
 $myTodayRows = array_filter($allViolations, fn($r) =>
     $r['recorded_by_name'] === $_SESSION['name'] &&
     date('Y-m-d', strtotime($r['date_recorded'])) === date('Y-m-d')
 );
 $myToday = count($myTodayRows);
 
-// My recordings this week
 $myWeek = count(array_filter($allViolations, fn($r) =>
     $r['recorded_by_name'] === $_SESSION['name'] &&
     strtotime($r['date_recorded']) >= strtotime('monday this week')
@@ -100,9 +98,14 @@ arsort($typeData);
 
 // Active tab
 $activeTab = 'record';
-if ($success || $error) $activeTab = 'record';
 if (isset($_GET['tab'])) $activeTab = $_GET['tab'];
 if (isset($_GET['lookup'])) $activeTab = 'lookup';
+
+// ── Sidebar badges ─────────────────────────────────────────
+$sidebarBadges = [
+    'violations' => $total,
+    'today'      => $myToday,
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -131,7 +134,6 @@ if (isset($_GET['lookup'])) $activeTab = 'lookup';
         .lookup-info span   { font-size: .78rem; color: var(--muted); }
         .lookup-badges      { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
 
-        /* Appeal warning banner */
         .appeal-warning {
             background: #fffbeb; border: 1.5px solid #fcd34d;
             border-radius: 9px; padding: .65rem 1rem;
@@ -147,7 +149,6 @@ if (isset($_GET['lookup'])) $activeTab = 'lookup';
         .today-entry:last-child { border-bottom: none; }
         .today-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; }
 
-        /* Appeal badge */
         .appeal-badge {
             display:inline-block; padding:2px 8px; border-radius:20px;
             font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
@@ -172,6 +173,9 @@ if (isset($_GET['lookup'])) $activeTab = 'lookup';
     </style>
 </head>
 <body>
+
+<div class="svs-app">
+
 <?php include '../includes/navbar.php'; ?>
 
 <!-- Confirm Submit Modal -->
@@ -188,346 +192,342 @@ if (isset($_GET['lookup'])) $activeTab = 'lookup';
     </div>
 </div>
 
-<div class="page-wrapper">
-    <div class="page-header">
-        <h2>Guard Dashboard</h2>
-        <p>Logged in as <strong><?= htmlspecialchars($_SESSION['name']) ?></strong> · <?= date('l, F d, Y') ?></p>
-    </div>
+<div class="svs-layout" id="svsLayout">
 
-    <!-- Stats -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-icon" style="background:#e8f0fe;">📋</div>
-            <div class="stat-info"><div class="stat-num"><?= $total ?></div><div class="stat-label">Total Violations</div></div>
-        </div>
-        <div class="stat-card accent">
-            <div class="stat-icon" style="background:#fee2e2;">⚠️</div>
-            <div class="stat-info"><div class="stat-num"><?= $pending ?></div><div class="stat-label">Pending</div></div>
-        </div>
-        <div class="stat-card green">
-            <div class="stat-icon" style="background:#d1fae5;">✅</div>
-            <div class="stat-info"><div class="stat-num"><?= $resolved ?></div><div class="stat-label">Resolved</div></div>
-        </div>
-        <div class="stat-card gold">
-            <div class="stat-icon" style="background:#fef3c7;">📝</div>
-            <div class="stat-info"><div class="stat-num"><?= $myToday ?></div><div class="stat-label">My Entries Today</div></div>
-        </div>
-        <div class="stat-card purple">
-            <div class="stat-icon" style="background:#ede9fe;">📆</div>
-            <div class="stat-info"><div class="stat-num"><?= $myWeek ?></div><div class="stat-label">My Entries This Week</div></div>
-        </div>
-    </div>
+    <?php include '../includes/sidebar.php'; ?>
 
-    <!-- Charts -->
-    <?php if ($total > 0): ?>
-    <div class="g2e" style="margin-bottom:1.4rem;">
-        <div class="chart-card">
-            <div class="chart-title"><span class="cdot" style="background:#1a3a5c;"></span>Violations Trend — Last 6 Months</div>
-            <div class="cwrap"><canvas id="trendChart"></canvas></div>
-        </div>
-        <div class="chart-card">
-            <div class="chart-title"><span class="cdot" style="background:#f0a500;"></span>By Violation Type</div>
-            <div class="cwrap"><canvas id="typeChart"></canvas></div>
-        </div>
-    </div>
-    <?php endif; ?>
+    <div class="svs-main">
+        <div class="page-wrapper">
+            <div class="page-header">
+                <h2>Guard Dashboard</h2>
+                <p>Logged in as <strong><?= htmlspecialchars($_SESSION['name']) ?></strong> · <?= date('l, F d, Y') ?></p>
+            </div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-        <button class="tab-btn" id="btn-record" onclick="switchTab('record',this)">📋 Record Violation</button>
-        <button class="tab-btn" id="btn-lookup" onclick="switchTab('lookup',this)">🔍 Student Lookup</button>
-        <button class="tab-btn" id="btn-today"  onclick="switchTab('today',this)">
-            📅 Today's Log
-            <?php if ($myToday > 0): ?>
-            <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:.68rem;margin-left:4px;"><?= $myToday ?></span>
+            <!-- Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:#e8f0fe;">📋</div>
+                    <div class="stat-info"><div class="stat-num"><?= $total ?></div><div class="stat-label">Total Violations</div></div>
+                </div>
+                <div class="stat-card accent">
+                    <div class="stat-icon" style="background:#fee2e2;">⚠️</div>
+                    <div class="stat-info"><div class="stat-num"><?= $pending ?></div><div class="stat-label">Pending</div></div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-icon" style="background:#d1fae5;">✅</div>
+                    <div class="stat-info"><div class="stat-num"><?= $resolved ?></div><div class="stat-label">Resolved</div></div>
+                </div>
+                <div class="stat-card gold">
+                    <div class="stat-icon" style="background:#fef3c7;">📝</div>
+                    <div class="stat-info"><div class="stat-num"><?= $myToday ?></div><div class="stat-label">My Entries Today</div></div>
+                </div>
+                <div class="stat-card purple">
+                    <div class="stat-icon" style="background:#ede9fe;">📆</div>
+                    <div class="stat-info"><div class="stat-num"><?= $myWeek ?></div><div class="stat-label">My Entries This Week</div></div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <?php if ($total > 0): ?>
+            <div class="g2e" style="margin-bottom:1.4rem;">
+                <div class="chart-card">
+                    <div class="chart-title"><span class="cdot" style="background:#1a3a5c;"></span>Violations Trend — Last 6 Months</div>
+                    <div class="cwrap"><canvas id="trendChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title"><span class="cdot" style="background:#f0a500;"></span>By Violation Type</div>
+                    <div class="cwrap"><canvas id="typeChart"></canvas></div>
+                </div>
+            </div>
             <?php endif; ?>
-        </button>
-        <button class="tab-btn" id="btn-all"    onclick="switchTab('all',this)">
-            📂 All Violations
-            <span style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 7px;font-size:.68rem;margin-left:4px;"><?= $total ?></span>
-        </button>
-    </div>
 
-    <!-- ══ TAB: RECORD ══ -->
-    <div id="tab-record" class="tab-content">
-        <div class="card">
-            <div class="card-title">📋 Record a Violation</div>
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn" id="btn-record" onclick="switchTab('record',this)">📋 Record Violation</button>
+                <button class="tab-btn" id="btn-lookup" onclick="switchTab('lookup',this)">🔍 Student Lookup</button>
+                <button class="tab-btn" id="btn-today"  onclick="switchTab('today',this)">
+                    📅 Today's Log
+                    <?php if ($myToday > 0): ?>
+                    <span style="background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:.68rem;margin-left:4px;"><?= $myToday ?></span>
+                    <?php endif; ?>
+                </button>
+                <button class="tab-btn" id="btn-all"    onclick="switchTab('all',this)">
+                    📂 All Violations
+                    <span style="background:var(--primary);color:#fff;border-radius:10px;padding:1px 7px;font-size:.68rem;margin-left:4px;"><?= $total ?></span>
+                </button>
+            </div>
 
-            <?php if ($success): ?><div class="alert alert-success">✅ <?= $success ?></div><?php endif; ?>
-            <?php if ($error):   ?><div class="alert alert-error">❌ <?= $error ?></div><?php endif; ?>
+            <!-- ══ TAB: RECORD ══ -->
+            <div id="tab-record" class="tab-content">
+                <div class="card">
+                    <div class="card-title">📋 Record a Violation</div>
 
-            <form id="violationForm" onsubmit="showConfirm(event)">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Student No. <span style="color:var(--accent)">*</span></label>
-                        <input type="text" name="student_no" id="sno_input" class="form-control"
-                               list="students-list"
-                               placeholder="e.g. C26-01-0001-MAN121"
-                               oninput="this.value=this.value.toUpperCase()"
-                               required>
-                        <datalist id="students-list">
-                            <?php while ($s = $students->fetch_assoc()): ?>
-                                <option value="<?= htmlspecialchars($s['student_no']) ?>"><?= htmlspecialchars($s['name']) ?></option>
-                            <?php endwhile; ?>
-                        </datalist>
-                    </div>
-                    <div class="form-group">
-                        <label>Violation Type <span style="color:var(--accent)">*</span></label>
-                        <select name="violation_type" id="vtype_input" class="form-control" required>
-                            <option value="">-- Select Type --</option>
-                            <option>Late</option>
-                            <option>Cutting Class</option>
-                            <option>Improper Uniform</option>
-                            <option>Disruptive Behavior</option>
-                            <option>Vandalism</option>
-                            <option>Prohibited Items</option>
-                            <option>Other</option>
-                        </select>
-                    </div>
+                    <?php if ($success): ?><div class="alert alert-success">✅ <?= $success ?></div><?php endif; ?>
+                    <?php if ($error):   ?><div class="alert alert-error">❌ <?= $error ?></div><?php endif; ?>
+
+                    <form id="violationForm" onsubmit="showConfirm(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Student No. <span style="color:var(--accent)">*</span></label>
+                                <input type="text" name="student_no" id="sno_input" class="form-control"
+                                       list="students-list"
+                                       placeholder="e.g. C26-01-0001-MAN121"
+                                       oninput="this.value=this.value.toUpperCase()"
+                                       required>
+                                <datalist id="students-list">
+                                    <?php while ($s = $students->fetch_assoc()): ?>
+                                        <option value="<?= htmlspecialchars($s['student_no']) ?>"><?= htmlspecialchars($s['name']) ?></option>
+                                    <?php endwhile; ?>
+                                </datalist>
+                            </div>
+                            <div class="form-group">
+                                <label>Violation Type <span style="color:var(--accent)">*</span></label>
+                                <select name="violation_type" id="vtype_input" class="form-control" required>
+                                    <option value="">-- Select Type --</option>
+                                    <option>Late</option>
+                                    <option>Cutting Class</option>
+                                    <option>Improper Uniform</option>
+                                    <option>Disruptive Behavior</option>
+                                    <option>Vandalism</option>
+                                    <option>Prohibited Items</option>
+                                    <option>Other</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date <span style="color:var(--accent)">*</span></label>
+                                <input type="date" name="date_recorded" id="date_input" class="form-control" value="<?= date('Y-m-d') ?>" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Description <span style="color:var(--muted); font-weight:400;">(optional)</span></label>
+                                <input type="text" name="description" id="desc_input" class="form-control" placeholder="Additional details...">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-accent">🚨 Record Violation</button>
+                    </form>
+
+                    <!-- Hidden real form -->
+                    <form id="realForm" method="POST" style="display:none;">
+                        <input type="hidden" name="student_no"     id="h_sno">
+                        <input type="hidden" name="violation_type" id="h_vtype">
+                        <input type="hidden" name="date_recorded"  id="h_date">
+                        <input type="hidden" name="description"    id="h_desc">
+                    </form>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Date <span style="color:var(--accent)">*</span></label>
-                        <input type="date" name="date_recorded" id="date_input" class="form-control" value="<?= date('Y-m-d') ?>" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Description <span style="color:var(--muted); font-weight:400;">(optional)</span></label>
-                        <input type="text" name="description" id="desc_input" class="form-control" placeholder="Additional details...">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-accent">🚨 Record Violation</button>
-            </form>
+            </div>
 
-            <!-- Hidden real form -->
-            <form id="realForm" method="POST" style="display:none;">
-                <input type="hidden" name="student_no"     id="h_sno">
-                <input type="hidden" name="violation_type" id="h_vtype">
-                <input type="hidden" name="date_recorded"  id="h_date">
-                <input type="hidden" name="description"    id="h_desc">
-            </form>
-        </div>
-    </div>
+            <!-- ══ TAB: STUDENT LOOKUP ══ -->
+            <div id="tab-lookup" class="tab-content">
+                <div class="card">
+                    <div class="card-title">🔍 Student Quick Lookup</div>
+                    <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">
+                        Look up a student by their ID number to see their violation history and appeal statuses before recording.
+                    </p>
+                    <form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                        <input type="hidden" name="tab" value="lookup">
+                        <div class="form-group" style="flex:1; min-width:200px; margin:0;">
+                            <label>Student No.</label>
+                            <input type="text" name="lookup" class="form-control"
+                                   placeholder="e.g. C26-01-0001-MAN121"
+                                   value="<?= htmlspecialchars($_GET['lookup'] ?? '') ?>"
+                                   oninput="this.value=this.value.toUpperCase()">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="margin-bottom:1.1rem;">Search</button>
+                    </form>
 
-    <!-- ══ TAB: STUDENT LOOKUP ══ -->
-    <div id="tab-lookup" class="tab-content">
-        <div class="card">
-            <div class="card-title">🔍 Student Quick Lookup</div>
-            <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">
-                Look up a student by their ID number to see their violation history and appeal statuses before recording.
-            </p>
-            <form method="GET" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
-                <input type="hidden" name="tab" value="lookup">
-                <div class="form-group" style="flex:1; min-width:200px; margin:0;">
-                    <label>Student No.</label>
-                    <input type="text" name="lookup" class="form-control"
-                           placeholder="e.g. C26-01-0001-MAN121"
-                           value="<?= htmlspecialchars($_GET['lookup'] ?? '') ?>"
-                           oninput="this.value=this.value.toUpperCase()">
-                </div>
-                <button type="submit" class="btn btn-primary" style="margin-bottom:1.1rem;">Search</button>
-            </form>
+                    <?php if (isset($_GET['lookup']) && $_GET['lookup']): ?>
+                        <?php if ($foundStudent): ?>
+                        <div class="lookup-result">
+                            <div class="lookup-avatar">
+                                <?php if (!empty($foundStudent['profile_photo'])): ?>
+                                    <img src="<?= BASE_URL ?>uploads/profile/<?= htmlspecialchars($foundStudent['profile_photo']) ?>" alt="Photo">
+                                <?php else: ?>
+                                    🎓
+                                <?php endif; ?>
+                            </div>
+                            <div class="lookup-info" style="flex:1;">
+                                <strong><?= htmlspecialchars($foundStudent['name']) ?></strong>
+                                <span><?= htmlspecialchars($foundStudent['student_no']) ?> · <?= htmlspecialchars($foundStudent['course']) ?> Year <?= $foundStudent['year_level'] ?></span>
+                                <div class="lookup-badges">
+                                    <span class="badge" style="background:#e8f0fe; color:#1d4ed8;">
+                                        <?= $foundStudent['vcount'] ?> total violation<?= $foundStudent['vcount'] != 1 ? 's' : '' ?>
+                                    </span>
+                                    <?php if ($foundStudent['vpending'] > 0): ?>
+                                        <span class="badge badge-pending"><?= $foundStudent['vpending'] ?> pending</span>
+                                    <?php else: ?>
+                                        <span class="badge badge-resolved">All clear</span>
+                                    <?php endif; ?>
+                                    <?php if ($foundStudent['vappeal_pending'] > 0): ?>
+                                        <span class="badge" style="background:#fef3c7; color:#92400e;">
+                                            ⚖️ <?= $foundStudent['vappeal_pending'] ?> appeal<?= $foundStudent['vappeal_pending'] > 1 ? 's' : '' ?> pending
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <button onclick="prefillRecord('<?= htmlspecialchars($foundStudent['student_no']) ?>')"
+                                    class="btn btn-accent btn-sm">
+                                🚨 Record Violation
+                            </button>
+                        </div>
 
-            <?php if (isset($_GET['lookup']) && $_GET['lookup']): ?>
-                <?php if ($foundStudent): ?>
-
-                <!-- Student info row -->
-                <div class="lookup-result">
-                    <!-- Profile photo or default avatar -->
-                    <div class="lookup-avatar">
-                        <?php if (!empty($foundStudent['profile_photo'])): ?>
-                            <img src="<?= BASE_URL ?>uploads/profile/<?= htmlspecialchars($foundStudent['profile_photo']) ?>" alt="Photo">
-                        <?php else: ?>
-                            🎓
+                        <?php if ($foundStudent['vappeal_pending'] > 0): ?>
+                        <div class="appeal-warning">
+                            ⚖️ This student has <strong><?= $foundStudent['vappeal_pending'] ?> pending appeal<?= $foundStudent['vappeal_pending'] > 1 ? 's' : '' ?></strong>
+                            under guidance review. Consider this before recording a new violation.
+                        </div>
                         <?php endif; ?>
-                    </div>
 
-                    <div class="lookup-info" style="flex:1;">
-                        <strong><?= htmlspecialchars($foundStudent['name']) ?></strong>
-                        <span><?= htmlspecialchars($foundStudent['student_no']) ?> · <?= htmlspecialchars($foundStudent['course']) ?> Year <?= $foundStudent['year_level'] ?></span>
-                        <div class="lookup-badges">
-                            <span class="badge" style="background:#e8f0fe; color:#1d4ed8;">
-                                <?= $foundStudent['vcount'] ?> total violation<?= $foundStudent['vcount'] != 1 ? 's' : '' ?>
-                            </span>
-                            <?php if ($foundStudent['vpending'] > 0): ?>
-                                <span class="badge badge-pending"><?= $foundStudent['vpending'] ?> pending</span>
-                            <?php else: ?>
-                                <span class="badge badge-resolved">All clear</span>
-                            <?php endif; ?>
-                            <?php if ($foundStudent['vappeal_pending'] > 0): ?>
-                                <span class="badge" style="background:#fef3c7; color:#92400e;">
-                                    ⚖️ <?= $foundStudent['vappeal_pending'] ?> appeal<?= $foundStudent['vappeal_pending'] > 1 ? 's' : '' ?> pending
-                                </span>
-                            <?php endif; ?>
+                        <?php
+                        $sViolations = array_filter($allViolations, fn($v) => $v['student_no'] === $foundStudent['student_no']);
+                        ?>
+                        <?php if (!empty($sViolations)): ?>
+                        <div style="margin-top:1.2rem;">
+                            <div class="card-title" style="font-size:.82rem;">Violation History</div>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead>
+                                        <tr><th>Violation</th><th>Date</th><th>Recorded By</th><th>Status</th><th>Appeal</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($sViolations as $sv):
+                                            $as = $sv['appeal_status'] ?? 'none';
+                                        ?>
+                                        <tr>
+                                            <td>
+                                                <strong><?= htmlspecialchars($sv['violation_type']) ?></strong>
+                                                <?php if ($sv['description']): ?>
+                                                <div style="font-size:.76rem; color:var(--muted);"><?= htmlspecialchars($sv['description']) ?></div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?= date('M d, Y', strtotime($sv['date_recorded'])) ?></td>
+                                            <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($sv['recorded_by_name']) ?></td>
+                                            <td><span class="badge badge-<?= $sv['status'] ?>"><?= ucfirst($sv['status']) ?></span></td>
+                                            <td>
+                                                <span class="appeal-badge appeal-<?= $as ?>">
+                                                    <?= $as === 'none' ? 'No appeal' : ucfirst($as) ?>
+                                                </span>
+                                                <?php if (!empty($sv['appeal_remarks']) && $as !== 'none'): ?>
+                                                <div style="font-size:.72rem; color:var(--muted); margin-top:2px;">
+                                                    <?= htmlspecialchars(mb_substr($sv['appeal_remarks'], 0, 50)) ?><?= strlen($sv['appeal_remarks']) > 50 ? '…' : '' ?>
+                                                </div>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+
+                        <?php else: ?>
+                        <div class="lookup-result not-found">
+                            <div class="lookup-avatar" style="background:#e84545;">❌</div>
+                            <div>
+                                <strong style="font-size:.9rem; color:#991b1b;">Student not found</strong><br>
+                                <span style="font-size:.8rem; color:#c53030;">No student with ID <strong><?= htmlspecialchars($_GET['lookup']) ?></strong> exists in the system.</span>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- ══ TAB: TODAY'S LOG ══ -->
+            <div id="tab-today" class="tab-content">
+                <div class="card">
+                    <div class="card-title">📅 My Entries Today — <?= date('F d, Y') ?></div>
+                    <?php if (empty($myTodayRows)): ?>
+                        <div class="empty-state">
+                            <div class="empty-icon">☀️</div>
+                            <p>No violations recorded by you today.</p>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($myTodayRows as $tr): ?>
+                        <div class="today-entry">
+                            <div class="today-dot"></div>
+                            <div style="flex:1;">
+                                <div style="font-size:.88rem; font-weight:700;"><?= htmlspecialchars($tr['student_name']) ?>
+                                    <code style="font-size:.76rem; color:var(--primary); font-weight:400; margin-left:6px;"><?= htmlspecialchars($tr['student_no']) ?></code>
+                                </div>
+                                <div style="font-size:.78rem; color:var(--muted);">
+                                    <?= htmlspecialchars($tr['violation_type']) ?>
+                                    <?php if ($tr['description']): ?> · <?= htmlspecialchars($tr['description']) ?><?php endif; ?>
+                                </div>
+                            </div>
+                            <span class="badge badge-<?= $tr['status'] ?>"><?= ucfirst($tr['status']) ?></span>
+                        </div>
+                        <?php endforeach; ?>
+                        <div style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); font-size:.82rem; color:var(--muted);">
+                            <?= $myToday ?> entr<?= $myToday != 1 ? 'ies' : 'y' ?> recorded today.
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- ══ TAB: ALL VIOLATIONS ══ -->
+            <div id="tab-all" class="tab-content">
+                <div class="card">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:.8rem;">
+                        <div class="card-title" style="margin:0; border:none; padding:0;">All Violations</div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <select id="filterStatus" onchange="filterTable()" class="form-control" style="max-width:140px; margin:0; padding:8px 12px;">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="resolved">Resolved</option>
+                            </select>
+                            <input type="text" id="searchInput" class="form-control"
+                                   placeholder="🔍 Search..." oninput="filterTable()"
+                                   style="max-width:200px; margin:0;">
                         </div>
                     </div>
+                    <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
 
-                    <button onclick="prefillRecord('<?= htmlspecialchars($foundStudent['student_no']) ?>')"
-                            class="btn btn-accent btn-sm">
-                        🚨 Record Violation
-                    </button>
-                </div>
-
-                <!-- Appeal warning — guard heads-up -->
-                <?php if ($foundStudent['vappeal_pending'] > 0): ?>
-                <div class="appeal-warning">
-                    ⚖️ This student has <strong><?= $foundStudent['vappeal_pending'] ?> pending appeal<?= $foundStudent['vappeal_pending'] > 1 ? 's' : '' ?></strong>
-                    under guidance review. Consider this before recording a new violation.
-                </div>
-                <?php endif; ?>
-
-                <!-- Violation history with appeal status -->
-                <?php
-                $sViolations = array_filter($allViolations, fn($v) => $v['student_no'] === $foundStudent['student_no']);
-                ?>
-                <?php if (!empty($sViolations)): ?>
-                <div style="margin-top:1.2rem;">
-                    <div class="card-title" style="font-size:.82rem;">Violation History</div>
+                    <?php if (empty($allViolations)): ?>
+                        <div class="empty-state"><div class="empty-icon">📂</div><p>No violations recorded yet.</p></div>
+                    <?php else: ?>
                     <div class="table-wrap">
-                        <table>
+                        <table id="violationsTable">
                             <thead>
                                 <tr>
-                                    <th>Violation</th>
-                                    <th>Date</th>
-                                    <th>Recorded By</th>
-                                    <th>Status</th>
-                                    <th>Appeal</th>
+                                    <th>#</th><th>Student No.</th><th>Student Name</th>
+                                    <th>Violation</th><th>Description</th><th>Date</th>
+                                    <th>Recorded By</th><th>Status</th><th>Appeal</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($sViolations as $sv):
-                                    $as = $sv['appeal_status'] ?? 'none';
+                                <?php foreach ($allViolations as $i => $v):
+                                    $as = $v['appeal_status'] ?? 'none';
                                 ?>
-                                <tr>
-                                    <td>
-                                        <strong><?= htmlspecialchars($sv['violation_type']) ?></strong>
-                                        <?php if ($sv['description']): ?>
-                                        <div style="font-size:.76rem; color:var(--muted);"><?= htmlspecialchars($sv['description']) ?></div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td><?= date('M d, Y', strtotime($sv['date_recorded'])) ?></td>
-                                    <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($sv['recorded_by_name']) ?></td>
-                                    <td><span class="badge badge-<?= $sv['status'] ?>"><?= ucfirst($sv['status']) ?></span></td>
+                                <tr data-status="<?= $v['status'] ?>">
+                                    <td><?= $i + 1 ?></td>
+                                    <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
+                                    <td><?= htmlspecialchars($v['student_name']) ?></td>
+                                    <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
+                                    <td style="color:var(--muted); font-size:.83rem;"><?= htmlspecialchars($v['description'] ?? '—') ?></td>
+                                    <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
+                                    <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($v['recorded_by_name']) ?></td>
+                                    <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
                                     <td>
                                         <span class="appeal-badge appeal-<?= $as ?>">
-                                            <?= $as === 'none' ? 'No appeal' : ucfirst($as) ?>
+                                            <?= $as === 'none' ? '—' : ucfirst($as) ?>
                                         </span>
-                                        <?php if (!empty($sv['appeal_remarks']) && $as !== 'none'): ?>
-                                        <div style="font-size:.72rem; color:var(--muted); margin-top:2px;">
-                                            <?= htmlspecialchars(mb_substr($sv['appeal_remarks'], 0, 50)) ?><?= strlen($sv['appeal_remarks']) > 50 ? '…' : '' ?>
-                                        </div>
-                                        <?php endif; ?>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
-                </div>
-                <?php endif; ?>
-
-                <?php else: ?>
-                <div class="lookup-result not-found">
-                    <div class="lookup-avatar" style="background:#e84545;">❌</div>
-                    <div>
-                        <strong style="font-size:.9rem; color:#991b1b;">Student not found</strong><br>
-                        <span style="font-size:.8rem; color:#c53030;">No student with ID <strong><?= htmlspecialchars($_GET['lookup']) ?></strong> exists in the system.</span>
-                    </div>
-                </div>
-                <?php endif; ?>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <!-- ══ TAB: TODAY'S LOG ══ -->
-    <div id="tab-today" class="tab-content">
-        <div class="card">
-            <div class="card-title">📅 My Entries Today — <?= date('F d, Y') ?></div>
-            <?php if (empty($myTodayRows)): ?>
-                <div class="empty-state">
-                    <div class="empty-icon">☀️</div>
-                    <p>No violations recorded by you today.</p>
-                </div>
-            <?php else: ?>
-                <?php foreach ($myTodayRows as $tr): ?>
-                <div class="today-entry">
-                    <div class="today-dot"></div>
-                    <div style="flex:1;">
-                        <div style="font-size:.88rem; font-weight:700;"><?= htmlspecialchars($tr['student_name']) ?>
-                            <code style="font-size:.76rem; color:var(--primary); font-weight:400; margin-left:6px;"><?= htmlspecialchars($tr['student_no']) ?></code>
-                        </div>
-                        <div style="font-size:.78rem; color:var(--muted);">
-                            <?= htmlspecialchars($tr['violation_type']) ?>
-                            <?php if ($tr['description']): ?> · <?= htmlspecialchars($tr['description']) ?><?php endif; ?>
-                        </div>
-                    </div>
-                    <span class="badge badge-<?= $tr['status'] ?>"><?= ucfirst($tr['status']) ?></span>
-                </div>
-                <?php endforeach; ?>
-                <div style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border); font-size:.82rem; color:var(--muted);">
-                    <?= $myToday ?> entr<?= $myToday != 1 ? 'ies' : 'y' ?> recorded today.
-                </div>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <!-- ══ TAB: ALL VIOLATIONS ══ -->
-    <div id="tab-all" class="tab-content">
-        <div class="card">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:.8rem;">
-                <div class="card-title" style="margin:0; border:none; padding:0;">All Violations</div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                    <select id="filterStatus" onchange="filterTable()" class="form-control" style="max-width:140px; margin:0; padding:8px 12px;">
-                        <option value="">All Status</option>
-                        <option value="pending">Pending</option>
-                        <option value="resolved">Resolved</option>
-                    </select>
-                    <input type="text" id="searchInput" class="form-control"
-                           placeholder="🔍 Search..." oninput="filterTable()"
-                           style="max-width:200px; margin:0;">
+                    <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
+                    <?php endif; ?>
                 </div>
             </div>
-            <div style="height:2px; background:var(--border); margin-bottom:1rem; border-radius:2px;"></div>
 
-            <?php if (empty($allViolations)): ?>
-                <div class="empty-state"><div class="empty-icon">📂</div><p>No violations recorded yet.</p></div>
-            <?php else: ?>
-            <div class="table-wrap">
-                <table id="violationsTable">
-                    <thead>
-                        <tr>
-                            <th>#</th><th>Student No.</th><th>Student Name</th>
-                            <th>Violation</th><th>Description</th><th>Date</th>
-                            <th>Recorded By</th><th>Status</th><th>Appeal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($allViolations as $i => $v):
-                            $as = $v['appeal_status'] ?? 'none';
-                        ?>
-                        <tr data-status="<?= $v['status'] ?>">
-                            <td><?= $i + 1 ?></td>
-                            <td><code style="font-size:.8rem; color:var(--primary);"><?= htmlspecialchars($v['student_no']) ?></code></td>
-                            <td><?= htmlspecialchars($v['student_name']) ?></td>
-                            <td><strong><?= htmlspecialchars($v['violation_type']) ?></strong></td>
-                            <td style="color:var(--muted); font-size:.83rem;"><?= htmlspecialchars($v['description'] ?? '—') ?></td>
-                            <td><?= date('M d, Y', strtotime($v['date_recorded'])) ?></td>
-                            <td style="font-size:.82rem; color:var(--muted);"><?= htmlspecialchars($v['recorded_by_name']) ?></td>
-                            <td><span class="badge badge-<?= $v['status'] ?>"><?= ucfirst($v['status']) ?></span></td>
-                            <td>
-                                <span class="appeal-badge appeal-<?= $as ?>">
-                                    <?= $as === 'none' ? '—' : ucfirst($as) ?>
-                                </span>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-            <p id="noResults" style="display:none; text-align:center; color:var(--muted); padding:1rem; font-size:.88rem;">No results found.</p>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
+        </div><!-- end page-wrapper -->
+    </div><!-- end svs-main -->
+</div><!-- end svs-layout -->
+</div><!-- end svs-app -->
 
 <script>
 <?php if ($total > 0): ?>
@@ -554,6 +554,8 @@ function switchTab(name, btn) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
     btn.classList.add('active');
+    // Sync sidebar active state
+    if (typeof syncSidebarActive === 'function') syncSidebarActive(name);
 }
 switchTab('<?= $activeTab ?>', document.getElementById('btn-<?= $activeTab ?>'));
 
