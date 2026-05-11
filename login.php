@@ -14,8 +14,11 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
+    $captcha  = $_POST['captcha'] ?? '';
 
-    if ($username && $password) {
+    if (!$captcha) {
+        $error = "Please verify that you are not a robot.";
+    } elseif ($username && $password) {
         $stmt = $conn->prepare("SELECT * FROM users WHERE username = ?");
         $stmt->bind_param("s", $username);
         $stmt->execute();
@@ -233,6 +236,140 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
 
         .toggle-pw:hover { color: var(--primary); background: rgba(26,58,92,0.06); }
 
+        /* ══ CAPTCHA BOX ══ */
+        .captcha-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 16px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--input-bg);
+            margin-bottom: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .captcha-box:hover {
+            border-color: #94a3b8;
+        }
+
+        .captcha-box.verified {
+            border-color: #22c55e;
+            background: #f0fdf4;
+        }
+
+        .captcha-box.shake {
+            animation: shake 0.4s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25%       { transform: translateX(-6px); }
+            75%       { transform: translateX(6px); }
+        }
+
+        /* Custom checkbox */
+        .captcha-checkbox-wrap {
+            position: relative;
+            width: 24px;
+            height: 24px;
+            flex-shrink: 0;
+        }
+
+        .captcha-checkbox-wrap input[type="checkbox"] {
+            opacity: 0;
+            position: absolute;
+            inset: 0;
+            cursor: pointer;
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        .captcha-custom-check {
+            position: absolute;
+            inset: 0;
+            border: 2.5px solid #94a3b8;
+            border-radius: 5px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            pointer-events: none;
+        }
+
+        .captcha-custom-check svg {
+            display: none;
+            width: 14px;
+            height: 14px;
+            color: white;
+        }
+
+        .captcha-checkbox-wrap input:checked ~ .captcha-custom-check {
+            background: #22c55e;
+            border-color: #22c55e;
+        }
+
+        .captcha-checkbox-wrap input:checked ~ .captcha-custom-check svg {
+            display: block;
+        }
+
+        /* Spinner shown while "verifying" */
+        .captcha-spinner {
+            display: none;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid #cbd5e1;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .captcha-label-wrap { flex: 1; }
+
+        .captcha-label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .captcha-label.verified-text {
+            color: #16a34a;
+        }
+
+        .captcha-logo {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .captcha-logo-icon {
+            font-size: 1.3rem;
+            line-height: 1;
+        }
+
+        .captcha-logo-text {
+            font-size: 0.52rem;
+            color: var(--muted);
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            text-align: center;
+            line-height: 1.2;
+        }
+
+        /* Hidden real checkbox sent to PHP */
+        #captchaHidden { display: none; }
+
         .login-btn {
             width: 100%;
             padding: 13px;
@@ -261,6 +398,12 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
         }
 
         .login-btn:active { transform: scale(0.98); }
+
+        .login-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
 
         .divider {
             display: flex;
@@ -321,7 +464,8 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
 
         <div class="sign-in-label">Sign in to continue</div>
 
-        <form method="POST">
+        <form method="POST" id="loginForm" onsubmit="return validateCaptcha()">
+
             <div class="field">
                 <label for="username">Username</label>
                 <div class="input-wrap">
@@ -350,7 +494,36 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
                 </div>
             </div>
 
-            <button type="submit" class="login-btn">
+            <!-- ══ CAPTCHA ══ -->
+            <div class="captcha-box" id="captchaBox" onclick="handleCaptchaClick()">
+                <!-- Spinner (shown briefly while "verifying") -->
+                <div class="captcha-spinner" id="captchaSpinner"></div>
+
+                <!-- Custom checkbox (hidden after spinner) -->
+                <div class="captcha-checkbox-wrap" id="captchaCheckWrap">
+                    <input type="checkbox" id="captchaCheck" onchange="onCheckboxChange(this)">
+                    <div class="captcha-custom-check">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="captcha-label-wrap">
+                    <span class="captcha-label" id="captchaLabel">I am not a robot</span>
+                </div>
+
+                <!-- reCAPTCHA-style branding -->
+                <div class="captcha-logo">
+                    <div class="captcha-logo-icon">🛡️</div>
+                    <div class="captcha-logo-text">SVS<br>Verify</div>
+                </div>
+            </div>
+
+            <!-- Hidden field sent to PHP -->
+            <input type="hidden" name="captcha" id="captchaHidden" value="">
+
+            <button type="submit" class="login-btn" id="loginBtn">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                     <polyline points="10 17 15 12 10 7"/>
@@ -369,6 +542,7 @@ $unauthorized = isset($_GET['error']) && $_GET['error'] === 'unauthorized';
 </div>
 
 <script>
+/* ── Password toggle ── */
 const eyeOpen   = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
 const eyeClosed = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>`;
 
@@ -378,6 +552,79 @@ function togglePw() {
     const isHidden = input.type === 'password';
     input.type     = isHidden ? 'text' : 'password';
     icon.innerHTML = isHidden ? eyeClosed : eyeOpen;
+}
+
+/* ── CAPTCHA logic ── */
+let captchaVerified = false;
+let verifying       = false;
+
+function handleCaptchaClick() {
+    // Only trigger if clicking the box itself (not the checkbox directly)
+    const check = document.getElementById('captchaCheck');
+    if (!captchaVerified && !verifying) {
+        check.checked = true;
+        onCheckboxChange(check);
+    }
+}
+
+function onCheckboxChange(checkbox) {
+    if (verifying) return;
+
+    if (checkbox.checked && !captchaVerified) {
+        startVerification();
+    } else if (!checkbox.checked) {
+        resetCaptcha();
+    }
+}
+
+function startVerification() {
+    verifying = true;
+
+    const box      = document.getElementById('captchaBox');
+    const spinner  = document.getElementById('captchaSpinner');
+    const checkWrap= document.getElementById('captchaCheckWrap');
+    const label    = document.getElementById('captchaLabel');
+
+    // Show spinner, hide checkbox temporarily
+    checkWrap.style.opacity = '0';
+    spinner.style.display   = 'block';
+    label.textContent        = 'Verifying…';
+
+    // Simulate brief verification delay (0.9s)
+    setTimeout(() => {
+        spinner.style.display    = 'none';
+        checkWrap.style.opacity  = '1';
+        captchaVerified          = true;
+        verifying                = false;
+
+        box.classList.add('verified');
+        label.textContent = '✓ Verified';
+        label.classList.add('verified-text');
+
+        document.getElementById('captchaHidden').value = '1';
+    }, 900);
+}
+
+function resetCaptcha() {
+    captchaVerified = false;
+    const box   = document.getElementById('captchaBox');
+    const label = document.getElementById('captchaLabel');
+
+    box.classList.remove('verified');
+    label.textContent = 'I am not a robot';
+    label.classList.remove('verified-text');
+    document.getElementById('captchaHidden').value = '';
+    document.getElementById('captchaCheck').checked = false;
+}
+
+function validateCaptcha() {
+    if (!captchaVerified) {
+        const box = document.getElementById('captchaBox');
+        box.classList.add('shake');
+        setTimeout(() => box.classList.remove('shake'), 400);
+        return false;
+    }
+    return true;
 }
 </script>
 </body>

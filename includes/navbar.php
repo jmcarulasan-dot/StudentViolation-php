@@ -2,6 +2,7 @@
 if (!defined('FONT_LOADED')): define('FONT_LOADED', true); ?>
 <link rel="preconnect" href="https://fonts.bunny.net">
 <link href="https://fonts.bunny.net/css?family=plus-jakarta-sans:300,400,500,600,700,800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
 <?php endif; ?>
 
 <?php
@@ -20,13 +21,12 @@ $roleColors = [
     'guidance' => '#8b5cf6',
 ];
 $roleColor = $roleColors[$role] ?? '#1a3a5c';
-$roleIcons = ['student' => '🎓', 'guard' => '🛡️', 'guidance' => '👩‍💼'];
-$roleIcon  = $roleIcons[$role] ?? '👤';
+$roleIcons = ['student' => 'ti-school', 'guard' => 'ti-shield', 'guidance' => 'ti-user-star'];
+$roleIcon  = $roleIcons[$role] ?? 'ti-user';
 
 // Profile photo for student nav avatar
 $navPhotoUrl = '';
 if ($role === 'student' && isset($_SESSION['student_id'])) {
-    // Use a lightweight query only if we don't have it cached
     if (!isset($_SESSION['_nav_photo'])) {
         global $conn;
         $sid  = intval($_SESSION['student_id']);
@@ -40,9 +40,65 @@ if ($role === 'student' && isset($_SESSION['student_id'])) {
         $navPhotoUrl = BASE_URL . 'uploads/profile/' . htmlspecialchars($_SESSION['_nav_photo']);
     }
 }
+
+// ── Notification data per role ────────────────────────────
+$notifications = [];
+$notifCount    = 0;
+global $conn;
+
+if ($role === 'guidance') {
+    $res = $conn->query("SELECT COUNT(*) AS cnt FROM violations WHERE appeal_status='pending'");
+    $cnt = $res ? $res->fetch_assoc()['cnt'] : 0;
+    if ($cnt > 0) {
+        $notifications[] = ['icon'=>'ti-file-text','color'=>'#f0a500','text'=>"$cnt pending appeal" . ($cnt>1?'s':'') . " awaiting review",'time'=>'Now'];
+    }
+    $res2 = $conn->query("SELECT COUNT(*) AS cnt FROM violations WHERE status='pending'");
+    $cnt2 = $res2 ? $res2->fetch_assoc()['cnt'] : 0;
+    if ($cnt2 > 0) {
+        $notifications[] = ['icon'=>'ti-alert-triangle','color'=>'#e84545','text'=>"$cnt2 unresolved violation" . ($cnt2>1?'s':''),'time'=>'Today'];
+    }
+} elseif ($role === 'guard') {
+    $res = $conn->query("SELECT COUNT(*) AS cnt FROM violations WHERE DATE(date_recorded)=CURDATE()");
+    $cnt = $res ? $res->fetch_assoc()['cnt'] : 0;
+    if ($cnt > 0) {
+        $notifications[] = ['icon'=>'ti-calendar','color'=>'#3b82f6','text'=>"$cnt violation" . ($cnt>1?'s':'') . " recorded today",'time'=>'Today'];
+    }
+    $res2 = $conn->query("SELECT COUNT(*) AS cnt FROM violations WHERE appeal_status='pending'");
+    $cnt2 = $res2 ? $res2->fetch_assoc()['cnt'] : 0;
+    if ($cnt2 > 0) {
+        $notifications[] = ['icon'=>'ti-file-text','color'=>'#f0a500','text'=>"$cnt2 student appeal" . ($cnt2>1?'s':'') . " pending",'time'=>'Now'];
+    }
+} elseif ($role === 'student' && isset($_SESSION['student_id'])) {
+    $sid  = intval($_SESSION['student_id']);
+    $res  = $conn->prepare("SELECT COUNT(*) AS cnt FROM violations WHERE student_id=? AND status='pending'");
+    $res->bind_param("i", $sid); $res->execute();
+    $cnt  = $res->get_result()->fetch_assoc()['cnt'];
+    if ($cnt > 0) {
+        $notifications[] = ['icon'=>'ti-alert-triangle','color'=>'#e84545','text'=>"$cnt pending violation" . ($cnt>1?'s':'') . " on your record",'time'=>'Now'];
+    }
+    $res2 = $conn->prepare("SELECT COUNT(*) AS cnt FROM violations WHERE student_id=? AND appeal_status='pending'");
+    $res2->bind_param("i", $sid); $res2->execute();
+    $cnt2 = $res2->get_result()->fetch_assoc()['cnt'];
+    if ($cnt2 > 0) {
+        $notifications[] = ['icon'=>'ti-clock','color'=>'#f0a500','text'=>"$cnt2 appeal" . ($cnt2>1?'s':'') . " awaiting guidance review",'time'=>'Pending'];
+    }
+    // Check if any appeal was recently resolved
+    $res3 = $conn->prepare("SELECT COUNT(*) AS cnt FROM violations WHERE student_id=? AND appeal_status IN ('approved','rejected')");
+    $res3->bind_param("i", $sid); $res3->execute();
+    $cnt3 = $res3->get_result()->fetch_assoc()['cnt'];
+    if ($cnt3 > 0) {
+        $notifications[] = ['icon'=>'ti-check','color'=>'#2ecc71','text'=>"$cnt3 appeal" . ($cnt3>1?'s':'') . " have been reviewed",'time'=>'Recent'];
+    }
+}
+$notifCount = count($notifications);
 ?>
 
 <nav class="navbar">
+    <!-- Mobile hamburger -->
+    <button class="nav-hamburger" id="mobileMenuBtn" onclick="toggleMobileSidebar()" aria-label="Toggle menu" style="display:none;">
+        <i class="ti ti-menu-2"></i>
+    </button>
+
     <a href="<?= $dashboardLink ?>" class="brand">
         <div style="
             width:42px; height:42px; min-width:42px;
@@ -61,15 +117,18 @@ if ($role === 'student' && isset($_SESSION['student_id'])) {
     </a>
 
     <div class="nav-user">
+        <!-- Role badge -->
         <div class="nav-role-badge" style="
             background:<?= $roleColor ?>22;
             color:<?= $roleColor ?>;
             border:1.5px solid <?= $roleColor ?>55;
+            display:flex; align-items:center; gap:5px;
         ">
-            <?= $roleIcon ?> <?= $roleLabel ?>
+            <i class="ti <?= $roleIcon ?>" style="font-size:.85rem;"></i>
+            <?= $roleLabel ?>
         </div>
 
-        <!-- Student: show photo avatar if available, otherwise name -->
+        <!-- Student photo or name -->
         <?php if ($role === 'student'): ?>
             <?php if ($navPhotoUrl): ?>
                 <img src="<?= $navPhotoUrl ?>" alt="Profile"
@@ -78,17 +137,59 @@ if ($role === 'student' && isset($_SESSION['student_id'])) {
             <?php else: ?>
                 <span class="nav-name"><?= htmlspecialchars($name) ?></span>
             <?php endif; ?>
-            <a href="<?= BASE_URL ?>student/profile.php" class="nav-link">Profile</a>
+            <a href="<?= BASE_URL ?>student/profile.php" class="nav-link">
+                <i class="ti ti-user" style="font-size:.85rem;"></i> Profile
+            </a>
         <?php else: ?>
             <span class="nav-name"><?= htmlspecialchars($name) ?></span>
         <?php endif; ?>
 
+        <!-- Notification Bell -->
+        <div class="notif-wrap">
+            <div class="nav-bell" id="notifBell" onclick="toggleNotif()" title="Notifications">
+                <i class="ti ti-bell"></i>
+                <?php if ($notifCount > 0): ?>
+                    <div class="nav-bell-dot"></div>
+                <?php endif; ?>
+            </div>
+
+            <div class="notif-dropdown" id="notifDropdown">
+                <div class="notif-header">
+                    <span>🔔 Notifications</span>
+                    <?php if ($notifCount > 0): ?>
+                        <span style="background:var(--accent);color:white;font-size:.65rem;font-weight:700;
+                                     border-radius:10px;padding:1px 8px;"><?= $notifCount ?></span>
+                    <?php endif; ?>
+                </div>
+                <?php if (empty($notifications)): ?>
+                    <div class="notif-empty">
+                        <i class="ti ti-check" style="font-size:1.5rem;display:block;margin-bottom:6px;color:var(--success);"></i>
+                        All caught up! No new alerts.
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($notifications as $notif): ?>
+                    <div class="notif-item">
+                        <div class="notif-dot" style="background:<?= $notif['color'] ?>;"></div>
+                        <div>
+                            <div class="notif-text"><?= htmlspecialchars($notif['text']) ?></div>
+                            <div class="notif-time"><?= htmlspecialchars($notif['time']) ?></div>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Logout -->
         <a href="#" class="nav-logout"
            onclick="document.getElementById('logoutModal').style.display='flex'; return false;">
-           Logout
+           <i class="ti ti-logout" style="font-size:.9rem;"></i> Logout
         </a>
     </div>
 </nav>
+
+<!-- Mobile sidebar overlay -->
+<div class="sidebar-mobile-overlay" id="sidebarMobileOverlay" onclick="closeMobileSidebar()"></div>
 
 <!-- Logout Modal -->
 <div id="logoutModal"
@@ -122,8 +223,54 @@ if ($role === 'student' && isset($_SESSION['student_id'])) {
                style="padding:.6rem 1.5rem; border-radius:9px; background:#e53e3e;
                       color:#fff; text-decoration:none; font-size:.88rem; font-weight:700;
                       display:inline-flex; align-items:center; gap:6px; font-family:inherit;">
-                Yes, Log Out
+                <i class="ti ti-logout"></i> Yes, Log Out
             </a>
         </div>
     </div>
 </div>
+
+<script>
+// ── Notification dropdown ─────────────────────────────────
+function toggleNotif() {
+    const dd = document.getElementById('notifDropdown');
+    dd.classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+    const wrap = document.querySelector('.notif-wrap');
+    if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('notifDropdown')?.classList.remove('open');
+    }
+});
+
+// ── Mobile sidebar ────────────────────────────────────────
+function toggleMobileSidebar() {
+    const sb      = document.getElementById('svsSidebar');
+    const overlay = document.getElementById('sidebarMobileOverlay');
+    if (!sb) return;
+    const isOpen = !sb.classList.contains('collapsed');
+    if (isOpen) {
+        sb.classList.add('collapsed');
+        overlay.classList.remove('open');
+    } else {
+        sb.classList.remove('collapsed');
+        overlay.classList.add('open');
+    }
+}
+
+function closeMobileSidebar() {
+    const sb      = document.getElementById('svsSidebar');
+    const overlay = document.getElementById('sidebarMobileOverlay');
+    if (sb) sb.classList.add('collapsed');
+    if (overlay) overlay.classList.remove('open');
+}
+
+// Show hamburger on mobile
+if (window.innerWidth <= 768) {
+    const btn = document.getElementById('mobileMenuBtn');
+    if (btn) btn.style.display = 'flex';
+}
+window.addEventListener('resize', () => {
+    const btn = document.getElementById('mobileMenuBtn');
+    if (btn) btn.style.display = window.innerWidth <= 768 ? 'flex' : 'none';
+});
+</script>
