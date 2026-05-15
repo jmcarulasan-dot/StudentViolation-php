@@ -96,7 +96,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── Data ───────────────────────────────────────────────────
-$students = $conn->query("SELECT * FROM students ORDER BY name")->fetch_all(MYSQLI_ASSOC);
+$students = $conn->query("
+    SELECT s.*, u.email
+    FROM students s
+    LEFT JOIN users u ON u.student_id = s.id AND u.role = 'student'
+    ORDER BY s.name
+")->fetch_all(MYSQLI_ASSOC);
 $violations = $conn->query("
     SELECT v.*, s.name AS student_name, s.student_no, s.course, u.name AS recorded_by_name
     FROM violations v
@@ -1055,6 +1060,7 @@ $sidebarBadges = [
                                             <th>Name</th>
                                             <th>Course</th>
                                             <th>Year</th>
+                                            <th>Email</th>
                                             <th>Violations</th>
                                             <th>Actions</th>
                                         </tr>
@@ -1073,6 +1079,16 @@ $sidebarBadges = [
                                                             style="width:26px;height:26px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:middle;border:1.5px solid var(--border);">
                                                     <?php endif; ?>
                                                     <?= htmlspecialchars($s['name']) ?>
+                                                </td>
+                                                <td>
+                                                    <?php if (!empty($s['email'])): ?>
+                                                        <a href="mailto:<?= htmlspecialchars($s['email']) ?>"
+                                                           style="font-size:.82rem; color:var(--primary);">
+                                                            <?= htmlspecialchars($s['email']) ?>
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <span style="color:var(--muted); font-size:.82rem;">—</span>
+                                                    <?php endif; ?>
                                                 </td>
                                                 <td><?= htmlspecialchars($s['course']) ?></td>
                                                 <td>Yr <?= $s['year_level'] ?></td>
