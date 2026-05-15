@@ -281,10 +281,12 @@ $sidebarBadges = [
     </div>
 </div>
 
-<div class="page-wrapper">
-    <div class="page-header">
-        <h2>Guidance Admin Dashboard</h2>
-        <p>Full control over students, violations, appeals, and analytics.</p>
+<div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
+        <div>
+            <h2>Guidance Admin Dashboard</h2>
+            <p>Full control over students, violations, appeals, and analytics.</p>
+        </div>
+        <a href="<?= BASE_URL ?>export_pdf.php" class="btn btn-outline">📄 Export PDF</a>
     </div>
 
     <?php if ($success): ?><div class="alert alert-success">✅ <?= htmlspecialchars($success) ?></div><?php endif; ?>

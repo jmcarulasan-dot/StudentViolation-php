@@ -1,5 +1,6 @@
 <?php
 require_once '../includes/config.php';
+require_once '../includes/mailer.php';
 requireLogin('guard');
 
 $success = '';
@@ -40,9 +41,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($found) {
             $stmt = $conn->prepare("INSERT INTO violations (student_id, violation_type, description, date_recorded, recorded_by) VALUES (?,?,?,?,?)");
             $stmt->bind_param("isssi", $found['id'], $violation_type, $description, $date_recorded, $_SESSION['user_id']);
-            $stmt->execute()
-                ? $success = "Violation recorded successfully for student <strong>{$student_no}</strong>!"
-                : $error   = "Failed to record violation.";
+            if ($stmt->execute()) {
+    $success = "Violation recorded successfully for student <strong>{$student_no}</strong>!";
+
+    // ── Send email notification to student ──
+    $emailStmt = $conn->prepare("
+        SELECT u.email, u.name FROM users u
+        JOIN students s ON u.student_id = s.id
+        WHERE s.student_no = ? AND u.email IS NOT NULL
+    ");
+    $emailStmt->bind_param("s", $student_no);
+    $emailStmt->execute();
+    $emailRow = $emailStmt->get_result()->fetch_assoc();
+
+    if ($emailRow && !empty($emailRow['email'])) {
+        sendViolationEmail(
+            $emailRow['email'],
+            $emailRow['name'],
+            $violation_type,
+            $description,
+            $date_recorded
+        );
+    }
+} else {
+    $error = "Failed to record violation.";
+}
         } else {
             $error = "Student No. <strong>{$student_no}</strong> not found in the system.";
         }
@@ -198,9 +221,12 @@ $sidebarBadges = [
 
     <div class="svs-main">
         <div class="page-wrapper">
-            <div class="page-header">
-                <h2>Guard Dashboard</h2>
-                <p>Logged in as <strong><?= htmlspecialchars($_SESSION['name']) ?></strong> · <?= date('l, F d, Y') ?></p>
+            <div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:1rem;">
+                <div>
+                    <h2>Guard Dashboard</h2>
+                    <p>Logged in as <strong><?= htmlspecialchars($_SESSION['name']) ?></strong> · <?= date('l, F d, Y') ?></p>
+                </div>
+                <a href="<?= BASE_URL ?>export_pdf.php" class="btn btn-outline">📄 Export PDF</a>
             </div>
 
             <!-- Stats -->
