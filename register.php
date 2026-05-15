@@ -12,7 +12,31 @@ if (isLoggedIn()) {
 $error   = '';
 $success = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// ── Generate CAPTCHA question (stored in session) ──────────
+function generateCaptcha(): void {
+    $a = random_int(1, 15);
+    $b = random_int(1, 15);
+    $ops = ['+', '-', '×'];
+    $op  = $ops[array_rand($ops)];
+
+    $answer = match($op) {
+        '+'  => $a + $b,
+        '-'  => $a - $b,
+        '×'  => $a * $b,
+    };
+
+    $_SESSION['_captcha_q']      = "{$a} {$op} {$b}";
+    $_SESSION['_captcha_answer'] = $answer;
+}
+
+// Generate captcha on first load or after a failed attempt
+if (!isset($_SESSION['_captcha_q']) || isset($_POST['regenerate_captcha'])) {
+    generateCaptcha();
+}
+
+// ── Handle Registration POST ───────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['regenerate_captcha'])) {
+
     $student_no = strtoupper(trim($_POST['student_no'] ?? ''));
     $name       = trim($_POST['name'] ?? '');
     $course     = trim($_POST['course'] ?? '');
@@ -20,10 +44,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username   = trim($_POST['username'] ?? '');
     $password   = $_POST['password'] ?? '';
     $confirm    = $_POST['confirm_password'] ?? '';
+    $captcha    = trim($_POST['captcha_answer'] ?? '');
 
     $pattern = '/^[A-Z]\d{2}-\d{2}-\d{4}-[A-Z]{3}\d{3}$/';
 
-    if (!$student_no || !$name || !$course || !$year_level || !$username || !$password || !$confirm) {
+    // ── Validate CAPTCHA first ─────────────────────────────
+    if ($captcha === '' || !is_numeric($captcha)) {
+        $error = "Please answer the math question to verify you're human.";
+    } elseif ((int)$captcha !== (int)$_SESSION['_captcha_answer']) {
+        $error = "Incorrect answer to the math question. Please try again.";
+        generateCaptcha(); // refresh captcha on wrong answer
+    }
+    // ── All other validations ──────────────────────────────
+    elseif (!$student_no || !$name || !$course || !$year_level || !$username || !$password || !$confirm) {
         $error = "Please fill in all fields.";
     } elseif (!preg_match($pattern, $student_no)) {
         $error = "Invalid Student No. format. Must follow: C26-01-0001-MAN121";
@@ -42,18 +75,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (strlen($password) < 6) {
         $error = "Password must be at least 6 characters.";
     } else {
+        // Check if student_no already exists
         $stmt = $conn->prepare("SELECT id FROM students WHERE student_no = ?");
         $stmt->bind_param("s", $student_no);
         $stmt->execute();
         if ($stmt->get_result()->num_rows > 0) {
             $error = "Student No. is already registered.";
         } else {
+            // Check if username already taken
             $stmt = $conn->prepare("SELECT id FROM users WHERE username = ?");
             $stmt->bind_param("s", $username);
             $stmt->execute();
             if ($stmt->get_result()->num_rows > 0) {
                 $error = "Username is already taken.";
             } else {
+                // ── Register ───────────────────────────────
                 $stmt = $conn->prepare("INSERT INTO students (student_no, name, course, year_level) VALUES (?,?,?,?)");
                 $stmt->bind_param("sssi", $student_no, $name, $course, $year_level);
                 if ($stmt->execute()) {
@@ -61,14 +97,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $hashed = password_hash($password, PASSWORD_DEFAULT);
                     $stmt2 = $conn->prepare("INSERT INTO users (name, username, password, role, student_id) VALUES (?,?,?,'student',?)");
                     $stmt2->bind_param("sssi", $name, $username, $hashed, $new_student_id);
-                    $stmt2->execute()
-                        ? $success = "Registration successful! You can now log in."
-                        : $error   = "Failed to create account. Try again.";
+                    if ($stmt2->execute()) {
+                        $success = "Registration successful! You can now log in.";
+                        // Clear CAPTCHA session after success
+                        unset($_SESSION['_captcha_q'], $_SESSION['_captcha_answer']);
+                    } else {
+                        $error = "Failed to create account. Try again.";
+                    }
                 } else {
                     $error = "Failed to register. Student No. may already exist.";
                 }
             }
         }
+    }
+
+    // Refresh captcha after any error
+    if ($error) {
+        generateCaptcha();
     }
 }
 ?>
@@ -82,23 +127,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --primary:      #1a3a5c;
-            --accent:       #e84545;
-            --bg:           #f0f4f8;
-            --white:        #ffffff;
-            --text:         #1e2a3a;
-            --muted:        #64748b;
-            --border:       #cbd5e1;
-            --border-focus: #1a3a5c;
-            --input-bg:     #f8fafc;
-            --radius:       12px;
-            --radius-lg:    20px;
-            --success-bg:   #f0fdf4;
-            --success-text: #166534;
-            --success-border: #bbf7d0;
-            --error-bg:     #fef2f2;
-            --error-text:   #991b1b;
-            --error-border: #fecaca;
+            --primary:       #1a3a5c;
+            --accent:        #e84545;
+            --bg:            #f0f4f8;
+            --white:         #ffffff;
+            --text:          #1e2a3a;
+            --muted:         #64748b;
+            --border:        #cbd5e1;
+            --border-focus:  #1a3a5c;
+            --input-bg:      #f8fafc;
+            --radius:        12px;
+            --radius-lg:     20px;
+            --success-bg:    #f0fdf4;
+            --success-text:  #166534;
+            --success-border:#bbf7d0;
+            --error-bg:      #fef2f2;
+            --error-text:    #991b1b;
+            --error-border:  #fecaca;
         }
 
         body, html {
@@ -107,277 +152,189 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         .register-page {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem 1rem;
-            position: relative;
-            overflow: hidden;
+            min-height: 100vh; display: flex; align-items: center;
+            justify-content: center; padding: 2rem 1rem;
+            position: relative; overflow: hidden;
         }
 
         .register-bg {
-            position: fixed;
-            inset: 0;
+            position: fixed; inset: 0;
             background: url('<?= BASE_URL ?>assets/image/BackGround.webp') center center / cover no-repeat;
-            filter: blur(4px) brightness(0.45);
-            transform: scale(1.08);
-            z-index: 0;
+            filter: blur(4px) brightness(0.45); transform: scale(1.08); z-index: 0;
         }
 
-        /* ── Card ── */
         .register-box {
-            position: relative;
-            z-index: 1;
-            background: var(--white);
-            border-radius: var(--radius-lg);
-            padding: 2.5rem 2.5rem 2rem;
-            width: 100%;
-            max-width: 540px;
+            position: relative; z-index: 1; background: var(--white);
+            border-radius: var(--radius-lg); padding: 2.5rem 2.5rem 2rem;
+            width: 100%; max-width: 540px;
             border: 2px solid rgba(255,255,255,0.6);
             box-shadow: 0 24px 80px rgba(0,0,0,0.35), 0 2px 0 rgba(255,255,255,0.5) inset;
         }
 
-        /* ── Header ── */
-        .register-logo {
-            text-align: center;
-            margin-bottom: 1.8rem;
-        }
-
+        .register-logo { text-align: center; margin-bottom: 1.8rem; }
         .logo-circle {
-            width: 72px; height: 72px;
-            background: white;
-            border-radius: 50%;
+            width: 72px; height: 72px; background: white; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            margin: 0 auto 0.9rem;
-            border: 2.5px solid var(--border);
-            box-shadow: 0 4px 16px rgba(26,58,92,0.12);
-            overflow: hidden;
+            margin: 0 auto .9rem; border: 2.5px solid var(--border);
+            box-shadow: 0 4px 16px rgba(26,58,92,0.12); overflow: hidden;
         }
+        .logo-circle img { width: 56px; height: 56px; object-fit: contain; }
+        .register-logo h1 { font-size: 1.3rem; font-weight: 700; color: var(--primary); letter-spacing: -.3px; }
+        .register-logo p  { color: var(--muted); font-size: .83rem; margin-top: 3px; }
 
-        .logo-circle img {
-            width: 56px; height: 56px;
-            object-fit: contain;
-        }
-
-        .register-logo h1 {
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: var(--primary);
-            letter-spacing: -0.3px;
-        }
-
-        .register-logo p {
-            color: var(--muted);
-            font-size: 0.83rem;
-            margin-top: 3px;
-        }
-
-        /* ── Alert ── */
         .alert {
-            padding: 11px 14px;
-            border-radius: 10px;
-            margin-bottom: 1.2rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border: 1.5px solid;
+            padding: 11px 14px; border-radius: 10px; margin-bottom: 1.2rem;
+            font-size: .875rem; font-weight: 500;
+            display: flex; align-items: center; gap: 8px; border: 1.5px solid;
         }
         .alert-error   { background: var(--error-bg);   color: var(--error-text);   border-color: var(--error-border); }
         .alert-success { background: var(--success-bg); color: var(--success-text); border-color: var(--success-border); }
         .alert-icon { width: 18px; height: 18px; flex-shrink: 0; }
 
-        /* ── Section divider ── */
         .section-divider {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 1.2rem 0 1rem;
+            display: flex; align-items: center; gap: 10px; margin: 1.2rem 0 1rem;
         }
         .section-divider::before, .section-divider::after {
-            content: '';
-            flex: 1;
-            height: 1.5px;
-            background: var(--border);
-            border-radius: 2px;
+            content: ''; flex: 1; height: 1.5px; background: var(--border); border-radius: 2px;
         }
         .section-divider span {
-            font-size: 0.74rem;
-            font-weight: 700;
-            color: var(--muted);
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            white-space: nowrap;
+            font-size: .74rem; font-weight: 700; color: var(--muted);
+            letter-spacing: 1px; text-transform: uppercase; white-space: nowrap;
         }
 
-        /* ── Grid ── */
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-        /* ── Field ── */
         .field { margin-bottom: 1rem; }
-
         .field label {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--text);
-            margin-bottom: 6px;
+            display: flex; align-items: center; gap: 6px;
+            font-size: .82rem; font-weight: 600; color: var(--text); margin-bottom: 6px;
         }
-
         .field label .req { color: var(--accent); }
+        .field label svg  { width: 14px; height: 14px; color: var(--muted); flex-shrink: 0; }
 
-        .field label svg {
-            width: 14px; height: 14px;
-            color: var(--muted);
-            flex-shrink: 0;
-        }
-
-        /* ── Inputs ── */
         .input-wrap { position: relative; }
-
         .input-icon {
-            position: absolute;
-            left: 13px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 17px; height: 17px;
-            color: var(--muted);
-            pointer-events: none;
+            position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+            width: 17px; height: 17px; color: var(--muted); pointer-events: none;
         }
 
         input.form-control,
         select.form-control {
-            width: 100%;
-            padding: 11px 14px 11px 42px;
-            border: 2px solid var(--border);
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 0.88rem;
-            color: var(--text);
-            background: var(--input-bg);
-            outline: none;
-            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-            appearance: none;
-            -webkit-appearance: none;
+            width: 100%; padding: 11px 14px 11px 42px;
+            border: 2px solid var(--border); border-radius: var(--radius);
+            font-family: inherit; font-size: .88rem; color: var(--text);
+            background: var(--input-bg); outline: none;
+            transition: border-color .2s, background .2s, box-shadow .2s;
+            appearance: none; -webkit-appearance: none;
         }
-
         input.form-control:focus,
         select.form-control:focus {
-            border-color: var(--border-focus);
-            background: var(--white);
-            box-shadow: 0 0 0 3px rgba(26,58,92,0.08);
+            border-color: var(--border-focus); background: var(--white);
+            box-shadow: 0 0 0 3px rgba(26,58,92,.08);
         }
-
         input.form-control::placeholder { color: #a0aec0; }
 
-        /* Select arrow */
         .select-wrap { position: relative; }
         .select-wrap::after {
-            content: '';
-            position: absolute;
-            right: 13px;
-            top: 50%;
-            transform: translateY(-50%);
+            content: ''; position: absolute; right: 13px; top: 50%; transform: translateY(-50%);
             width: 0; height: 0;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 6px solid var(--muted);
-            pointer-events: none;
+            border-left: 5px solid transparent; border-right: 5px solid transparent;
+            border-top: 6px solid var(--muted); pointer-events: none;
         }
-
         select.form-control { padding-right: 36px; cursor: pointer; }
 
-        /* ── Hints ── */
-        .field-hint {
-            font-size: 0.74rem;
-            color: var(--muted);
-            margin-top: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
+        .field-hint { font-size: .74rem; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
         .field-hint.ok    { color: #166534; }
         .field-hint.error { color: #991b1b; }
 
-        /* ── Submit ── */
-        .submit-btn {
-            width: 100%;
-            padding: 13px;
-            margin-top: 0.4rem;
-            background: var(--primary);
-            color: white;
-            border: 2px solid var(--primary);
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 0.92rem;
-            font-weight: 700;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+        /* ── CAPTCHA box ── */
+        .captcha-box {
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8f4ff 100%);
+            border: 2px solid #bfdbfe;
+            border-radius: 12px;
+            padding: 1rem 1.2rem;
+            margin-bottom: 1rem;
         }
-        .submit-btn:hover  { background: #14304d; border-color: #14304d; box-shadow: 0 4px 16px rgba(26,58,92,0.25); }
-        .submit-btn:active { transform: scale(0.98); }
+        .captcha-label {
+            font-size: .72rem; font-weight: 700; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .6px; margin-bottom: .5rem;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .captcha-row {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+        }
+        .captcha-question {
+            font-size: 1.4rem; font-weight: 800; color: var(--primary);
+            background: white; border: 2px solid #bfdbfe; border-radius: 9px;
+            padding: 8px 18px; flex-shrink: 0; letter-spacing: 2px;
+            user-select: none;
+        }
+        .captcha-equals {
+            font-size: 1.3rem; font-weight: 700; color: var(--muted); flex-shrink: 0;
+        }
+        .captcha-input-wrap { flex: 1; min-width: 80px; max-width: 140px; }
+        .captcha-input-wrap input {
+            width: 100%; padding: 10px 14px;
+            border: 2px solid #bfdbfe; border-radius: 9px;
+            font-family: inherit; font-size: 1.1rem; font-weight: 700;
+            text-align: center; color: var(--primary);
+            background: white; outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .captcha-input-wrap input:focus {
+            border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,58,92,.08);
+        }
+        .captcha-refresh {
+            background: none; border: none; cursor: pointer; padding: 0;
+            color: var(--muted); font-size: .8rem; font-family: inherit;
+            display: flex; align-items: center; gap: 5px;
+            text-decoration: underline; white-space: nowrap; flex-shrink: 0;
+        }
+        .captcha-refresh:hover { color: var(--primary); }
+        .captcha-hint {
+            font-size: .74rem; color: var(--muted); margin-top: .45rem;
+        }
 
-        /* ── Login link ── */
-        .login-link {
-            text-align: center;
-            margin-top: 1.2rem;
-            font-size: 0.85rem;
-            color: var(--muted);
+        .submit-btn {
+            width: 100%; padding: 13px; margin-top: .4rem;
+            background: var(--primary); color: white;
+            border: 2px solid var(--primary); border-radius: var(--radius);
+            font-family: inherit; font-size: .92rem; font-weight: 700;
+            letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+            transition: background .2s, transform .1s, box-shadow .2s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
         }
+        .submit-btn:hover  { background: #14304d; border-color: #14304d; box-shadow: 0 4px 16px rgba(26,58,92,.25); }
+        .submit-btn:active { transform: scale(.98); }
+
+        .login-link { text-align: center; margin-top: 1.2rem; font-size: .85rem; color: var(--muted); }
         .login-link a { color: var(--primary); font-weight: 700; text-decoration: none; }
         .login-link a:hover { text-decoration: underline; }
 
-        /* ── Success state ── */
-        .success-state {
-            text-align: center;
-            padding: 1rem 0;
-        }
+        /* Success state */
+        .success-state { text-align: center; padding: 1rem 0; }
         .success-icon {
-            width: 56px; height: 56px;
-            background: var(--success-bg);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            margin: 0 auto 1rem;
-            border: 2px solid var(--success-border);
+            width: 56px; height: 56px; background: var(--success-bg);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1rem; border: 2px solid var(--success-border);
         }
         .success-icon svg { width: 28px; height: 28px; color: #166534; }
-        .success-state h3 { font-size: 1.1rem; font-weight: 700; color: var(--primary); margin-bottom: 0.4rem; }
-        .success-state p  { color: var(--muted); font-size: 0.88rem; margin-bottom: 1.4rem; }
-
+        .success-state h3 { font-size: 1.1rem; font-weight: 700; color: var(--primary); margin-bottom: .4rem; }
+        .success-state p  { color: var(--muted); font-size: .88rem; margin-bottom: 1.4rem; }
         .go-login-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 12px 28px;
-            background: var(--primary);
-            color: white;
-            border: 2px solid var(--primary);
-            border-radius: var(--radius);
-            font-family: inherit;
-            font-size: 0.9rem;
-            font-weight: 700;
-            text-decoration: none;
-            transition: background 0.2s;
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 28px; background: var(--primary); color: white;
+            border: 2px solid var(--primary); border-radius: var(--radius);
+            font-family: inherit; font-size: .9rem; font-weight: 700;
+            text-decoration: none; transition: background .2s;
         }
         .go-login-btn:hover { background: #14304d; }
 
         @media (max-width: 560px) {
             .form-row { grid-template-columns: 1fr; }
             .register-box { padding: 2rem 1.4rem 1.6rem; }
+            .captcha-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .captcha-input-wrap { max-width: 100%; }
         }
     </style>
 </head>
@@ -395,6 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <?php if ($success): ?>
+        <!-- ── Success State ── -->
         <div class="success-state">
             <div class="success-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -427,7 +385,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <form method="POST" id="regForm">
-            <!-- Student Info -->
+
+            <!-- ── Student Info ── -->
             <div class="form-row">
                 <div class="field">
                     <label>
@@ -441,11 +400,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
                         </svg>
                         <input type="text" name="student_no" id="student_no" class="form-control"
-                            placeholder="C26-01-0001-MAN121"
-                            value="<?= htmlspecialchars($_POST['student_no'] ?? '') ?>"
-                            maxlength="18"
-                            oninput="validateStudentNo(this)"
-                            required>
+                               placeholder="C26-01-0001-MAN121"
+                               value="<?= htmlspecialchars($_POST['student_no'] ?? '') ?>"
+                               maxlength="18" oninput="validateStudentNo(this)" required>
                     </div>
                     <div class="field-hint" id="sno-hint">Format: C26-01-0001-MAN121</div>
                 </div>
@@ -464,8 +421,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <circle cx="12" cy="7" r="4"/>
                         </svg>
                         <input type="text" name="name" class="form-control"
-                            placeholder="Juan dela Cruz"
-                            value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" required>
+                               placeholder="Juan dela Cruz"
+                               value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" required>
                     </div>
                 </div>
             </div>
@@ -514,7 +471,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
-            <!-- Login Credentials -->
+            <!-- ── Login Credentials ── -->
             <div class="section-divider"><span>Login Credentials</span></div>
 
             <div class="field">
@@ -531,8 +488,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <circle cx="12" cy="7" r="4"/>
                     </svg>
                     <input type="text" name="username" class="form-control"
-                        placeholder="Min. 3 chars, letters/numbers/dots/underscores"
-                        value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required>
+                           placeholder="Min. 3 chars, letters/numbers/dots/underscores"
+                           value="<?= htmlspecialchars($_POST['username'] ?? '') ?>" required>
                 </div>
             </div>
 
@@ -551,7 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                         <input type="password" name="password" id="pw1" class="form-control"
-                            placeholder="Min. 6 characters" required>
+                               placeholder="Min. 6 characters" required>
                     </div>
                 </div>
 
@@ -569,11 +526,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                         </svg>
                         <input type="password" name="confirm_password" id="pw2" class="form-control"
-                            placeholder="Re-enter password"
-                            oninput="checkPwMatch()" required>
+                               placeholder="Re-enter password"
+                               oninput="checkPwMatch()" required>
                     </div>
                     <div class="field-hint" id="pw-hint"></div>
                 </div>
+            </div>
+
+            <!-- ── CAPTCHA ── -->
+            <div class="section-divider"><span>Security Check</span></div>
+
+            <div class="captcha-box">
+                <div class="captcha-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    Solve this to prove you're human
+                </div>
+                <div class="captcha-row">
+                    <div class="captcha-question"><?= htmlspecialchars($_SESSION['_captcha_q'] ?? '? + ?') ?></div>
+                    <div class="captcha-equals">=</div>
+                    <div class="captcha-input-wrap">
+                        <input type="number" name="captcha_answer" id="captcha_answer"
+                               placeholder="?" autocomplete="off" required
+                               inputmode="numeric"
+                               style="padding-left:14px;">
+                    </div>
+                    <button type="submit" name="regenerate_captcha" value="1"
+                            class="captcha-refresh" title="Get a new question">
+                        🔄 New question
+                    </button>
+                </div>
+                <div class="captcha-hint">Tip: Type the numeric answer (e.g. 7, -3, 20)</div>
             </div>
 
             <button type="submit" class="submit-btn">

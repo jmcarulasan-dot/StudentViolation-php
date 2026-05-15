@@ -206,10 +206,11 @@ $sidebarBadges = [
 </head>
 <body>
 
+<div class="svs-app">
+
 <?php include '../includes/navbar.php'; ?>
 
-<div class="svs-app">
-  <div class="svs-layout" id="svsLayout">
+<div class="svs-layout" id="svsLayout">
 
     <?php include '../includes/sidebar.php'; ?>
 
