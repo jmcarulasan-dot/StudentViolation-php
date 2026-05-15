@@ -69,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['step']) && $_POST['st
                 session_write_close();
                 session_start();
 
+                logAudit($conn, 'LOGIN', 'user', (int) $_SESSION['user_id'], "Role: {$_SESSION['role']}");
                 if ($user['role'] === 'student') {
                     header("Location: " . BASE_URL . "student/dashboard.php");
                     exit();
@@ -200,6 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['step']) && $_POST['st
         session_write_close();
         session_start();
 
+        logAudit($conn, 'LOGIN', 'user', (int) $_SESSION['user_id'], "Role: {$_SESSION['role']}");
         $role = $_SESSION['role'];
         if ($role === 'student') {
             header("Location: " . BASE_URL . "student/dashboard.php");
@@ -773,6 +775,15 @@ function maskEmail(string $email): string
                         </svg>
                         Login
                     </button>
+
+                    <!-- Forgot Password Link -->
+                    <div style="text-align:center; margin-top:.8rem;">
+                        <a href="<?= BASE_URL ?>forgot_password.php"
+                            style="font-size:.82rem; color:var(--muted); text-decoration:none;">
+                            🔑 Forgot password?
+                        </a>
+                    </div>
+
                 </form>
 
                 <div class="divider"><span>or</span></div>
