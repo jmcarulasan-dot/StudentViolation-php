@@ -17,8 +17,8 @@ use PHPMailer\PHPMailer\Exception;
 // ── CONFIG — change these ──────────────────────────────────
 define('MAIL_HOST',      'smtp.gmail.com');
 define('MAIL_PORT',      587);
-define('MAIL_FROM',      'your_gmail@gmail.com');   // Your Gmail address
-define('MAIL_PASS',      'your_app_password_here'); // Gmail App Password (16-char)
+define('MAIL_FROM',      'jeffmarionc@gmail.com');   // Your Gmail address
+define('MAIL_PASS',      'znpf zunp quug xxkd'); // Gmail App Password (16-char)
 define('MAIL_FROM_NAME', 'ACLC SVS');
 // ──────────────────────────────────────────────────────────
 
